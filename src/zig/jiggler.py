@@ -20,7 +20,6 @@ log = logging.getLogger("zig.jiggler")
 Method = Literal["mouse", "key", "both"]
 
 _JITTER_RATIO = 0.20
-_CORRECTION_DELAY_S = 0.05
 _MIN_INTERVAL_S = 1.0
 
 
@@ -36,7 +35,6 @@ class JigglerState:
 class Jiggler:
     interval_seconds: float = 45.0
     method: Method = "both"
-    jitter_pixels: int = 1
     on_state_change: Optional[Callable[[JigglerState], None]] = None
 
     _stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
@@ -106,13 +104,9 @@ class Jiggler:
     def _do_jiggle(self) -> None:
         with self._lock:
             method = self.method
-            px = self.jitter_pixels
 
         if method in ("mouse", "both"):
-            send_mouse_jitter(+px, 0)
-            if self._stop.wait(_CORRECTION_DELAY_S):
-                return
-            send_mouse_jitter(-px, 0)
+            send_mouse_jitter()
 
         if method in ("key", "both"):
             send_f15()

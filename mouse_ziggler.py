@@ -41,17 +41,39 @@ def _write_crash(exc: BaseException) -> Path:
 
 
 def _smoke() -> int:
-    """Import everything that the live app touches, then exit 0.
+    """Import + instantiate everything the live app touches, then exit 0.
 
-    Run by CI after PyInstaller builds, so a regression like the
-    relative-import bug fails the build instead of shipping to users.
+    Run by CI after PyInstaller builds. Catches:
+      - Relative-import regressions (the v0.1.0 bug)
+      - Constructor signature drift between modules
+      - Missing-symbol regressions (e.g. winapi exports a function the
+        jiggler imports)
+      - Method-signature mismatches at call sites used in startup code
+    Does NOT call into ctypes (Win32) or pystray.run() — those can't be
+    safely exercised in headless CI.
     """
-    import zig
     import zig.jiggler
     import zig.tray
     import zig.winapi
-    _ = zig.jiggler.Jiggler  # noqa: F841 — touch the symbol
-    _ = zig.tray.TrayApp     # noqa: F841
+
+    j = zig.jiggler.Jiggler(interval_seconds=10.0, method="both")
+    assert j.state.running is False
+    j.set_interval(20.0)
+    j.set_method("mouse")
+    assert j.method == "mouse"
+
+    for name in ("prevent_sleep", "allow_sleep", "send_mouse_jitter",
+                 "send_f15", "get_idle_seconds"):
+        if not hasattr(zig.winapi, name):
+            print(f"smoke FAIL: zig.winapi missing {name}", flush=True)
+            return 2
+
+    import inspect
+    sig = inspect.signature(zig.winapi.send_mouse_jitter)
+    if len(sig.parameters) != 0:
+        print(f"smoke FAIL: send_mouse_jitter has params {sig}", flush=True)
+        return 3
+
     print("smoke ok", flush=True)
     return 0
 
@@ -60,7 +82,7 @@ def main() -> int:
     if "--smoke" in sys.argv:
         return _smoke()
     if "--version" in sys.argv:
-        print("mouse_ziggler 0.1.1", flush=True)
+        print("mouse_ziggler 0.1.2", flush=True)
         return 0
     from zig.tray import run_tray
     run_tray()
