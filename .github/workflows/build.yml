@@ -38,7 +38,7 @@ jobs:
           fi
 
       - name: Build with PyInstaller
-        run: pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --paths src --hidden-import zig --hidden-import zig.tray --hidden-import zig.jiggler --hidden-import zig.winapi --hidden-import zig.activity --hidden-import zig.autostart --hidden-import zig.config --hidden-import zig.hotkey --hidden-import zig.logging_setup --hidden-import zig.stats --hidden-import zig.updater noidle.py
+        run: pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --paths src --hidden-import zig --hidden-import zig.tray --hidden-import zig.jiggler --hidden-import zig.winapi --hidden-import zig.activity --hidden-import zig.autostart --hidden-import zig.config --hidden-import zig.hotkey --hidden-import zig.logging_setup --hidden-import zig.stats --hidden-import zig.updater --hidden-import zig.whats_new noidle.py
 
       - name: Smoke-test built .exe (--smoke imports everything and exits 0)
         shell: pwsh

@@ -6,7 +6,6 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
@@ -25,6 +24,7 @@ from .jiggler import Jiggler, JigglerState, Method
 from .logging_setup import log_dir, setup_file_logging
 from .stats import Stats
 from .updater import check_for_update
+from .whats_new import mock_for_preview, show_whats_new_async
 from .winapi import get_idle_seconds
 
 log = logging.getLogger("zig.tray")
@@ -94,6 +94,7 @@ class TrayApp:
         self.jiggler.on_state_change = self._on_state_change
 
         self._hotkey: HotkeyListener | None = None
+        self._last_offered_version: str = ""
 
         self._icon = pystray.Icon(
             "noidle",
@@ -139,6 +140,7 @@ class TrayApp:
             MenuItem("Show stats", self._show_stats),
             MenuItem("Show idle time", self._show_idle),
             MenuItem("Check for updates now", self._manual_update_check),
+            MenuItem("Preview update dialog", self._preview_whats_new),
             MenuItem("Open log", self._open_log),
             MenuItem("Open data folder", self._open_data_folder),
             MenuItem("Show autostart target", self._show_autostart_target),
@@ -256,17 +258,50 @@ class TrayApp:
             if manual:
                 self._icon.notify("Update check failed (offline?)", "noidle")
             return
-        if info.is_newer:
-            self._icon.notify(
-                f"Update available: v{info.latest} (you have v{info.current})\nClick tray icon menu → download",
-                "noidle",
-            )
+        if not info.is_newer:
+            if manual:
+                self._icon.notify(f"Up to date (v{info.current})", "noidle")
+            return
+        # Auto-checks honor the user's "Skip this version" choice;
+        # manual checks always show the window so the user can override.
+        if not manual and info.latest == self.config.skipped_version:
+            log.info("update v%s skipped per user preference", info.latest)
+            return
+        self._open_whats_new(info.current, info.latest, info.body, info.url)
+
+    def _open_whats_new(self, current: str, latest: str, body: str, url: str) -> None:
+        self._last_offered_version = latest
+        show_whats_new_async(
+            self._handle_update_choice,
+            current_version=current,
+            latest_version=latest,
+            release_notes=body,
+            release_url=url,
+        )
+
+    def _handle_update_choice(self, choice: str) -> None:
+        # Runs on the whats_new worker thread; no Tk objects touched here.
+        if choice == "skip":
+            # Store the version we just showed so we don't re-prompt for it.
+            # (We stash it on tray.config; the dialog itself doesn't know.)
             try:
-                webbrowser.open(info.url)
+                latest = getattr(self, "_last_offered_version", None)
+                if latest:
+                    self.config.skipped_version = latest
+                    self._save()
             except Exception:
-                pass
-        elif manual:
-            self._icon.notify(f"Up to date (v{info.current})", "noidle")
+                log.exception("save skipped_version failed")
+        elif choice == "download":
+            log.info("user chose to download update")
+        else:
+            log.info("user dismissed update window")
+
+    def _preview_whats_new(self, _icon, _item) -> None:
+        # Debug menu item: opens the window with mock data so the user
+        # can see what an update prompt looks like without waiting.
+        kwargs = mock_for_preview()
+        self._last_offered_version = kwargs["latest_version"]
+        show_whats_new_async(self._handle_update_choice, **kwargs)
 
     def _quit(self, _icon, _item) -> None:
         try:

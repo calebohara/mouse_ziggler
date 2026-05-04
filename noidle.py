@@ -51,7 +51,14 @@ def _smoke() -> int:
     import zig.stats
     import zig.tray
     import zig.updater
+    import zig.whats_new
     import zig.winapi
+
+    parsed = zig.whats_new.parse_release_notes(
+        "## What's Changed\n* feat: foo by @x in #1\n* fix: bar by @y in #2\n"
+    )
+    assert parsed.sections["Added"] == ["foo"], parsed.sections
+    assert parsed.sections["Fixed"] == ["bar"], parsed.sections
 
     j = zig.jiggler.Jiggler(interval_seconds=10.0, method="both")
     assert j.state.running is False
@@ -98,7 +105,7 @@ def main() -> int:
     if "--smoke" in sys.argv:
         return _smoke()
     if "--version" in sys.argv:
-        print("noidle.app 0.3.0", flush=True)
+        print("noidle.app 0.3.1", flush=True)
         return 0
     from zig.tray import run_tray
     run_tray()
