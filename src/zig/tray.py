@@ -15,7 +15,6 @@ import pystray
 from PIL import Image, ImageDraw
 from pystray import Menu, MenuItem
 
-from .activity import is_teams_screen_sharing
 from .autostart import current_target as autostart_target
 from .autostart import disable as autostart_disable
 from .autostart import enable as autostart_enable
