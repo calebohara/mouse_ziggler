@@ -22,6 +22,8 @@ It does this politely: when you're already typing, it stays out of your way. Whe
 
 Double-click. The icon lands in your system tray, right-click it to start.
 
+Want to verify the binary you just downloaded? Every release ships a `SHA256SUMS.txt` and [cosign](https://docs.sigstore.dev/) signatures (`.sig` + `.pem`). See **[SIGNING.md](SIGNING.md)** for the one-liner verify commands.
+
 <!-- LATEST_RELEASE_START -->
 <!-- This block is auto-updated by .github/workflows/update-readme.yml on every release. -->
 
@@ -113,7 +115,13 @@ The first time you run `noidle.exe`, expect a "Windows protected your PC" dialog
 1. Click **More info**
 2. Click **Run anyway**
 
-Until/unless the project gets a code-signing certificate (out of scope right now), this is the expected UX. For peace of mind, every release `.exe` can be inspected on [VirusTotal](https://www.virustotal.com/) before running. Full source is in this repo — read it.
+This goes away once the project has an Authenticode code-signing certificate. We've applied to the [SignPath.io OSS Foundation](https://signpath.io/foundation) for one (free for qualifying open-source projects); see [SECURITY.md](SECURITY.md) for status.
+
+In the meantime, every release ships:
+- **`SHA256SUMS.txt`** — verify with `Get-FileHash` (PowerShell) or `sha256sum`
+- **[Cosign keyless signatures](https://docs.sigstore.dev/)** (`.sig` + `.pem`) — cryptographic proof the binary was built by THIS repo's tagged release on GitHub Actions, anchored in the public Sigstore Rekor transparency log
+
+Full instructions in **[SIGNING.md](SIGNING.md)**. Source is in this repo — read it. You can also upload the `.exe` to [VirusTotal](https://www.virustotal.com/) before running.
 
 ---
 
@@ -121,17 +129,19 @@ Until/unless the project gets a code-signing certificate (out of scope right now
 
 ```
 src/zig/
-├── winapi.py        # ctypes wrappers: SendInput, SetThreadExecutionState, GetLastInputInfo
-├── jiggler.py       # threaded engine, ±20% interval randomization, drift-corrected
-├── tray.py          # pystray UI, dynamic icon, runtime config
-├── config.py        # atomic JSON persistence (%APPDATA%\noidle\config.json)
-├── autostart.py     # HKCU\Run toggle for Start-with-Windows
-├── activity.py      # smart-pause + Teams screen-share detection
+├── __init__.py      # __version__ — single source of truth for version
+├── winapi.py        # ctypes wrappers: SendInput, SetThreadExecutionState, GetLastInputInfo, GetTickCount64
+├── jiggler.py       # threaded engine, ±20% interval randomization, adaptive smart-pause
+├── tray.py          # pystray UI, dynamic icon, runtime config, bounded shutdown watchdog
+├── config.py        # atomic JSON persistence (%APPDATA%\noidle\config.json), thread-safe
+├── autostart.py     # HKCU\Run toggle, install-mode aware (MSI vs portable distinct values)
+├── activity.py      # smart-pause + Teams screen-share detection (cached WinDLL binding)
 ├── logging_setup.py # rotating log file in %LOCALAPPDATA%\noidle\
-├── updater.py       # GitHub Releases poll
-├── hotkey.py        # global hotkey (Win32 RegisterHotKey)
-└── stats.py         # uptime + tick counters
-noidle.py            # entry point — `python noidle.py` or PyInstaller bundle
+├── updater.py       # GitHub Releases poll, URL whitelist, 6h/24h rate limit
+├── hotkey.py        # global hotkey (Win32 RegisterHotKey), per-instance ID, F1–F24 supported
+├── stats.py         # uptime + tick counters, thread-safe
+└── whats_new.py     # tk subprocess dialog for updates + critical alerts (HiDPI-aware)
+noidle.py            # entry point — `python noidle.py` or PyInstaller bundle, single-instance mutex
 ```
 
 Deep dives:
@@ -139,17 +149,22 @@ Deep dives:
 - [docs/teams-presence.md](docs/teams-presence.md) — how Teams determines presence and where input-based tools hit a wall
 - [docs/hid-vs-software.md](docs/hid-vs-software.md) — software vs kernel vs hardware injection, and the EDR detection story
 - [docs/release.md](docs/release.md) — how to cut a release
+- [SECURITY.md](SECURITY.md) — open audit findings and threat model
+- [SIGNING.md](SIGNING.md) — verifying release binaries
 
 ---
 
 ## Building yourself
 
-A push of a tag like `v0.3.0` triggers `.github/workflows/build.yml`, which runs on a `windows-latest` GitHub Actions runner, builds with PyInstaller, packages a per-user MSI with WiX v4, and attaches both `noidle.exe` and `noidle.msi` to a GitHub Release. To build locally on Windows:
+A push of a tag like `v0.3.7` triggers `.github/workflows/build.yml`, which runs on a `windows-latest` GitHub Actions runner, builds with PyInstaller, packages a per-user MSI with WiX v4, generates SHA256 checksums + cosign keyless signatures, and attaches all artifacts to a GitHub Release. To build the `.exe` locally on Windows:
 
 ```powershell
-pip install pyinstaller
+pip install "pyinstaller==6.11.1"
 python scripts/make_icon.py   # only if assets/icon.ico is missing
-pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --paths src noidle.py
+pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico `
+            --add-data "assets;assets" --paths src `
+            --collect-submodules zig `
+            noidle.py
 ```
 
 Output: `dist/noidle.exe`.
@@ -158,9 +173,17 @@ Output: `dist/noidle.exe`.
 
 ## Security & known issues
 
-The codebase has been through a deep audit (5 specialist reviewers, 119 findings). v0.3.4 fixed 11 critical/high bugs; v0.3.5 fixed another 15 (Win32 robustness, single-instance guard, HiDPI dialog, F1–F24 hotkey support, smart-pause adaptive threshold, GetTickCount64 for >49-day uptimes, atexit cleanup so Ctrl+C doesn't leave the system pinned awake, and more).
+The codebase has been through a deep audit — 5 specialist reviewers, 119 findings across concurrency, security, Win32, packaging, and UX. As of v0.3.7, **41 critical/high audit findings have been resolved** across v0.3.4–v0.3.7:
 
-The remaining open items — most notably **no code signing** (your antivirus will warn, that's by design until/unless we get a cert), **MSI vs .exe registry collision**, and **Focus Assist swallowing tray notifications** — are tracked in [SECURITY.md](SECURITY.md) with severity, threat model, and fix sketches.
+- **v0.3.4 (11 fixes)**: tkinter-on-thread crash → subprocess; shell injection in update-readme.yml; URL scheme whitelist; rate-limited update checks; "Skip this version" floor semantics; hotkey-failure visibility; smoke gate for empty release notes.
+- **v0.3.5 (15 fixes)**: GetTickCount64 (no 49.7d wraparound); F1–F24 hotkey support; single-instance mutex; atexit cleanup so Ctrl+C doesn't pin the system awake; HiDPI-aware dialogs; bounded shutdown watchdog; install-mode-aware skipped_version floor.
+- **v0.3.6 + v0.3.7 (15 fixes)**: install-mode-aware autostart (MSI vs portable distinct registry values, no more collisions); cosign keyless signing for every release artifact via GitHub OIDC; SHA256SUMS.txt for tamper-evidence; startup-critical alerts use Tk dialog instead of Focus-Assist-swallowed tray balloons.
+
+Remaining open items are tracked in [SECURITY.md](SECURITY.md):
+- **CRIT-A** — Authenticode code signing (still open; cosign + SHA256 are shipped, but SmartScreen needs Authenticode). [SignPath.io OSS](https://signpath.io/foundation) application is the path forward.
+- **CRIT-C** — Focus Assist swallows informational tray balloons (low impact; the *important* alerts now use Tk dialogs).
+- **HIGH-1** — Symlink/junction guard on log directory writes.
+- **HIGH-2** — Action SHA pinning (cosign-installer is partially pinned; others still on major-version tags).
 
 ## License
 
