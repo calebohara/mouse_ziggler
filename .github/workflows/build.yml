@@ -66,9 +66,9 @@ jobs:
           echo "version=${v}" >> "$GITHUB_OUTPUT"
           echo "Using MSI version: ${v}"
 
-      - name: Install WiX Toolset (v4 .NET tool)
+      - name: Install WiX Toolset (pinned to v4; v7 requires OSMF EULA)
         shell: pwsh
-        run: dotnet tool install --global wix
+        run: dotnet tool install --global wix --version 4.0.5
 
       - name: Build MSI
         shell: pwsh
