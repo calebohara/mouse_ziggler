@@ -108,7 +108,7 @@ def main() -> int:
     if "--smoke" in sys.argv:
         return _smoke()
     if "--version" in sys.argv:
-        print("noidle.app 0.3.2", flush=True)
+        print("noidle.app 0.3.3", flush=True)
         return 0
     from zig.tray import run_tray
     run_tray()
