@@ -243,6 +243,99 @@ def launch_whats_new_subprocess(
 show_whats_new_async = None  # type: ignore[assignment]
 
 
+# --------------------------------------------------------------------------- #
+# Generic "info dialog" — a small Tk modal for important alerts that can't
+# rely on Shell_NotifyIcon balloons (which Windows 11 Focus Assist
+# silently filters). Used today only for the startup hotkey-unavailable
+# warning, but the subprocess interface is generic enough to add more
+# uses later without re-introducing the tk-on-background-thread bug.
+# --------------------------------------------------------------------------- #
+
+
+def run_info_dialog(title: str, message: str) -> int:
+    """Subprocess entry: read title+message from stdin, show a small
+    auto-dismissing Tk dialog, exit 0.
+    """
+    try:
+        import json
+        if title == "" and message == "":
+            payload = json.loads(sys.stdin.read())
+            title = str(payload.get("title", "noidle.app"))
+            message = str(payload.get("message", ""))
+        _show_info(title, message)
+        return 0
+    except Exception:
+        log.exception("info dialog subprocess failed")
+        return 1
+
+
+def _show_info(title: str, message: str) -> None:
+    import tkinter as tk
+    from tkinter import ttk
+
+    _enable_dpi_awareness()
+
+    root = tk.Tk()
+    root.title(title)
+    root.minsize(360, 140)
+    root.geometry("420x180")
+    try:
+        root.attributes("-topmost", True)
+    except Exception:
+        pass
+
+    style = ttk.Style(root)
+    if "vista" in style.theme_names() and sys.platform == "win32":
+        style.theme_use("vista")
+
+    body = ttk.Frame(root, padding=(20, 18, 20, 12))
+    body.pack(fill="both", expand=True)
+    ttk.Label(body, text=title, font=("Segoe UI", 12, "bold")).pack(anchor="w")
+    ttk.Label(body, text=message, wraplength=380, justify="left",
+              foreground="#444").pack(anchor="w", pady=(8, 0))
+
+    footer = ttk.Frame(root, padding=(20, 0, 20, 16))
+    footer.pack(fill="x")
+    ttk.Button(footer, text="OK", command=root.destroy).pack(side="right")
+
+    root.bind("<Return>", lambda _e: root.destroy())
+    root.bind("<Escape>", lambda _e: root.destroy())
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+    root.update_idletasks()
+    w, h = root.winfo_width(), root.winfo_height()
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+    root.geometry(f"+{(sw - w) // 2}+{(sh - h) // 3}")
+    root.mainloop()
+
+
+def launch_info_dialog_subprocess(*, title: str, message: str, timeout: float = 60.0) -> None:
+    """Spawn the info dialog as a child process; fire-and-forget.
+
+    Does NOT block the caller for user response — the dialog stays open
+    until the user dismisses it. Caller should NOT wait on the subprocess.
+    """
+    import json
+    payload = json.dumps({"title": title, "message": message})
+    try:
+        argv = _resolve_subprocess_argv()
+        # Replace the trailing --whats-new with --info-dialog
+        argv[-1] = "--info-dialog"
+        proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # Write the payload, then close stdin so the child can read EOF.
+        # Don't wait — we're fire-and-forget.
+        if proc.stdin is not None:
+            proc.stdin.write(payload.encode("utf-8"))
+            proc.stdin.close()
+    except Exception:
+        log.exception("info dialog launch failed")
+
+
 def _enable_dpi_awareness() -> None:
     """Opt the process into per-monitor DPI awareness BEFORE creating the
     Tk root. Without this, tk dialogs are bitmap-scaled by Windows and

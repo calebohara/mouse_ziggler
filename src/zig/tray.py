@@ -30,7 +30,7 @@ from .updater import (
     is_offerable,
     should_check_now,
 )
-from .whats_new import launch_whats_new_subprocess, mock_for_preview
+from .whats_new import launch_info_dialog_subprocess, launch_whats_new_subprocess, mock_for_preview
 from .winapi import get_idle_seconds
 
 log = logging.getLogger("zig.tray")
@@ -536,12 +536,33 @@ class TrayApp:
         self._icon.run()
 
     def _notify_hotkey_failure_after_start(self) -> None:
-        # Wait a beat for the icon to be visible before notifying.
+        # Wait a beat for the icon to be visible before alerting.
         time.sleep(2.0)
-        self._notify(
-            f"Couldn't register hotkey {self.config.hotkey}: {self._hotkey_error}.\n"
-            "The tray menu still works. Edit config.json to change the chord."
-        )
+        if self._quitting.is_set():
+            return
+        # Use a Tk dialog instead of a tray balloon — Win11 Focus Assist
+        # silently filters Shell_NotifyIcon balloons, and this is the
+        # ONE message a user really needs to see at first launch (their
+        # hotkey is dead and they need to know why).
+        try:
+            launch_info_dialog_subprocess(
+                title="noidle.app — hotkey unavailable",
+                message=(
+                    f"Couldn't register the global hotkey {self.config.hotkey}: "
+                    f"{self._hotkey_error}.\n\n"
+                    "Another app is probably already using this chord. "
+                    "The tray menu still works — right-click the green dot "
+                    "in your system tray to start/pause.\n\n"
+                    "To pick a different hotkey, edit %APPDATA%\\noidle\\"
+                    "config.json (any letter A-Z or function key F1-F24)."
+                ),
+            )
+        except Exception:
+            log.exception("hotkey-error dialog failed; falling back to tray balloon")
+            self._notify(
+                f"Couldn't register hotkey {self.config.hotkey}: {self._hotkey_error}.\n"
+                "Tray menu still works. Edit config.json to change the chord."
+            )
 
     def _hotkey_pressed(self) -> None:
         # Runs on the hotkey listener thread; pystray marshals icon updates.

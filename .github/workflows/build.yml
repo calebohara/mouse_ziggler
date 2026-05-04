@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # for cosign keyless signing via GitHub OIDC
 
 jobs:
   build:
@@ -112,6 +113,45 @@ jobs:
             exit 1
           }
 
+      - name: Generate SHA256SUMS
+        # Standalone checksums file users can verify with `Get-FileHash`
+        # (PowerShell) or `sha256sum` (Linux/macOS). Lives next to the
+        # binaries on the GitHub Release.
+        shell: pwsh
+        run: |
+          Set-Location dist
+          $files = Get-ChildItem -File -Include "noidle.exe","noidle.msi"
+          $lines = $files | ForEach-Object {
+            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower()
+            "{0}  {1}" -f $h, $_.Name
+          }
+          $lines | Out-File -Encoding ascii SHA256SUMS.txt -NoNewline
+          Add-Content -Path SHA256SUMS.txt -Value ""
+          Get-Content SHA256SUMS.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d7d6e113ae9fb1a6c0eb39be73ca7a82dabbf8be   # v3.7.0
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Sign artifacts with cosign (keyless via GitHub OIDC)
+        # Free cryptographic signing — no cert needed. Generates .sig +
+        # .pem files alongside each binary, plus a transparency-log entry
+        # in Rekor that anyone can audit. Does NOT make Windows
+        # SmartScreen happy (that requires Authenticode), but does let
+        # security-conscious users verify the binary actually came from
+        # this repo's tagged release.
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          Set-Location dist
+          foreach ($f in "noidle.exe","noidle.msi","SHA256SUMS.txt") {
+            cosign sign-blob --yes --output-signature "$f.sig" --output-certificate "$f.pem" $f
+          }
+          Get-ChildItem | Format-Table Name, Length
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -119,6 +159,9 @@ jobs:
           path: |
             dist/noidle.exe
             dist/noidle.msi
+            dist/SHA256SUMS.txt
+            dist/*.sig
+            dist/*.pem
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -128,6 +171,13 @@ jobs:
           files: |
             dist/noidle.exe
             dist/noidle.msi
+            dist/SHA256SUMS.txt
+            dist/noidle.exe.sig
+            dist/noidle.exe.pem
+            dist/noidle.msi.sig
+            dist/noidle.msi.pem
+            dist/SHA256SUMS.txt.sig
+            dist/SHA256SUMS.txt.pem
           generate_release_notes: true
 
       # NOTE: deliberately no `Trigger README auto-update` step here.

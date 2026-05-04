@@ -249,6 +249,12 @@ def main() -> int:
         # acquire the single-instance mutex — the parent already owns it.
         from zig.whats_new import run_subprocess_dialog
         return run_subprocess_dialog()
+    if "--info-dialog" in sys.argv:
+        # Subprocess entry for important alerts that can't rely on
+        # Shell_NotifyIcon balloons (Win11 Focus Assist filters them).
+        # Reads {title, message} JSON from stdin.
+        from zig.whats_new import run_info_dialog
+        return run_info_dialog("", "")
 
     # Single-instance guard for the actual tray (not for --smoke /
     # --version / --whats-new helper invocations).
