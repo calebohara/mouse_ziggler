@@ -37,7 +37,19 @@ jobs:
           fi
 
       - name: Build with PyInstaller
-        run: pyinstaller --onefile --noconsole --name MouseZiggler --icon assets/icon.ico --add-data "assets;assets" src/zig/__main__.py
+        run: pyinstaller --onefile --noconsole --name MouseZiggler --icon assets/icon.ico --add-data "assets;assets" --paths src --hidden-import zig --hidden-import zig.tray --hidden-import zig.jiggler --hidden-import zig.winapi mouse_ziggler.py
+
+      - name: Smoke-test built .exe (--smoke imports everything and exits 0)
+        shell: pwsh
+        run: |
+          $exe = "dist/MouseZiggler.exe"
+          if (-not (Test-Path $exe)) { Write-Error "Build produced no exe"; exit 1 }
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke" -Wait -PassThru -NoNewWindow
+          Write-Host "Exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) {
+            Write-Error "MouseZiggler.exe --smoke failed with exit $($p.ExitCode) — startup imports broke. Refusing to publish."
+            exit 1
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
