@@ -117,17 +117,30 @@ jobs:
         # Standalone checksums file users can verify with `Get-FileHash`
         # (PowerShell) or `sha256sum` (Linux/macOS). Lives next to the
         # binaries on the GitHub Release.
+        # NB: PowerShell's Get-ChildItem -Include is a wildcard filter
+        # that requires -Recurse to actually filter; we enumerate
+        # explicitly to avoid that gotcha.
         shell: pwsh
         run: |
           Set-Location dist
-          $files = Get-ChildItem -File -Include "noidle.exe","noidle.msi"
-          $lines = $files | ForEach-Object {
-            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower()
-            "{0}  {1}" -f $h, $_.Name
+          $names = "noidle.exe", "noidle.msi"
+          $lines = foreach ($name in $names) {
+            if (-not (Test-Path -LiteralPath $name)) {
+              Write-Error "Expected artifact missing: $name"
+              exit 1
+            }
+            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $name).Hash.ToLower()
+            "{0}  {1}" -f $h, $name
           }
-          $lines | Out-File -Encoding ascii SHA256SUMS.txt -NoNewline
-          Add-Content -Path SHA256SUMS.txt -Value ""
+          $content = ($lines -join "`n") + "`n"
+          [System.IO.File]::WriteAllText("$pwd/SHA256SUMS.txt", $content)
+          $size = (Get-Item SHA256SUMS.txt).Length
+          if ($size -lt 100) {
+            Write-Error "SHA256SUMS.txt looks empty (size=$size)"
+            exit 1
+          }
           Get-Content SHA256SUMS.txt
+          Write-Host "SHA256SUMS.txt size: $size bytes"
 
       - name: Install cosign
         # Pinned to v3 major; see SECURITY.md HIGH-2 for the action-SHA-
