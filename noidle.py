@@ -22,6 +22,77 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 
+_SINGLE_INSTANCE_NAME = "Global\\noidle.app.singleinstance"
+
+
+def _acquire_single_instance() -> object | None:
+    """Try to acquire a process-wide named mutex. Returns the handle on
+    success (caller must hold the reference for the process lifetime),
+    None if another instance already holds it.
+
+    On non-Windows, returns a sentinel so dev runs aren't blocked.
+    """
+    if sys.platform != "win32":
+        return object()
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.argtypes = [
+            ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR
+        ]
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+
+        handle = kernel32.CreateMutexW(None, False, _SINGLE_INSTANCE_NAME)
+        if not handle:
+            return None
+        ERROR_ALREADY_EXISTS = 183
+        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+            # Another instance owns it; release our handle and bail.
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel32.CloseHandle.restype = wintypes.BOOL
+            kernel32.CloseHandle(handle)
+            return None
+        return handle
+    except Exception:
+        # Fail-open: if mutex creation hits an unexpected error, allow
+        # the launch rather than locking the user out of their own app.
+        return object()
+
+
+def _install_cleanup_handlers() -> None:
+    """Ensure prevent_sleep() is undone even on KeyboardInterrupt or a
+    crash that bypasses the tray's normal shutdown. allow_sleep() is
+    idempotent and safe to call many times.
+    """
+    import atexit
+    import signal
+
+    def _cleanup(*_a) -> None:
+        try:
+            from zig.winapi import allow_sleep
+            allow_sleep()
+        except Exception:
+            pass
+
+    def _on_signal(*_a) -> None:
+        _cleanup()
+        sys.exit(130)
+
+    atexit.register(_cleanup)
+    try:
+        signal.signal(signal.SIGINT, _on_signal)
+    except (ValueError, OSError):
+        # Not in main thread or signal not supported on this platform.
+        pass
+    if sys.platform == "win32":
+        try:
+            signal.signal(signal.SIGBREAK, _on_signal)  # type: ignore[attr-defined]
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def _crash_log_path() -> Path:
     base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     d = base / "noidle"
@@ -168,14 +239,43 @@ def main() -> int:
     if "--smoke" in sys.argv:
         return _smoke()
     if "--version" in sys.argv:
-        print("noidle.app 0.3.4", flush=True)
+        from zig import __version__ as v
+        print(f"noidle.app {v}", flush=True)
         return 0
     if "--whats-new" in sys.argv:
         # Subprocess entry: tkinter runs on its own main thread. Tray
         # spawns this child to show the update dialog without violating
-        # tkinter's main-thread-only contract.
+        # tkinter's main-thread-only contract. NB: this child must NOT
+        # acquire the single-instance mutex — the parent already owns it.
         from zig.whats_new import run_subprocess_dialog
         return run_subprocess_dialog()
+
+    # Single-instance guard for the actual tray (not for --smoke /
+    # --version / --whats-new helper invocations).
+    handle = _acquire_single_instance()
+    if handle is None:
+        # Another tray is running — show a friendly toast (best effort)
+        # and exit. We deliberately don't try to focus the existing
+        # instance because pystray icons aren't focusable.
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    "noidle.app is already running — check your system tray.",
+                    "noidle.app",
+                    0x40,  # MB_ICONINFORMATION
+                )
+            except Exception:
+                pass
+        return 0
+
+    _install_cleanup_handlers()
+    # Hold a reference to `handle` for the lifetime of the process so the
+    # mutex isn't released by the OS. (The cleanup handler doesn't close
+    # it explicitly — when the process exits the OS reclaims the handle.)
+    globals()["__single_instance_handle__"] = handle
+
     from zig.tray import run_tray
     run_tray()
     return 0

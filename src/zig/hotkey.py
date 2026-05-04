@@ -42,6 +42,14 @@ def _next_id() -> int:
 
 
 def parse_hotkey(spec: str) -> tuple[int, int]:
+    """Parse a chord spec like 'ctrl+alt+z' or 'ctrl+shift+f13' into
+    (modifier_bitmask, virtual_key_code).
+
+    Accepts:
+      - Single letters a-z (VK 0x41..0x5A)
+      - Function keys f1..f24 (VK 0x70..0x87) — F13..F24 are the safest
+        global hotkeys to bind because no mainstream app uses them.
+    """
     if not isinstance(spec, str) or not spec.strip():
         raise ValueError(f"empty hotkey spec: {spec!r}")
     parts = [p.strip().lower() for p in spec.split("+") if p.strip()]
@@ -53,10 +61,21 @@ def parse_hotkey(spec: str) -> tuple[int, int]:
         if m not in _MODIFIER_MAP:
             raise ValueError(f"unknown modifier {m!r} in {spec!r}")
         modifiers |= _MODIFIER_MAP[m]
-    if len(key) != 1 or not ("a" <= key <= "z"):
-        raise ValueError(f"key must be a-z, got {key!r} in {spec!r}")
-    vk = 0x41 + (ord(key) - ord("a"))
-    return modifiers, vk
+
+    # Function keys F1..F24
+    if len(key) >= 2 and key[0] == "f" and key[1:].isdigit():
+        n = int(key[1:])
+        if 1 <= n <= 24:
+            return modifiers, 0x70 + (n - 1)  # VK_F1=0x70 .. VK_F24=0x87
+        raise ValueError(f"function key out of range f1..f24: {key!r} in {spec!r}")
+
+    # Single letters a-z
+    if len(key) == 1 and "a" <= key <= "z":
+        return modifiers, 0x41 + (ord(key) - ord("a"))
+
+    raise ValueError(
+        f"key must be a-z or f1..f24, got {key!r} in {spec!r}"
+    )
 
 
 def _bind_user32_kernel32():

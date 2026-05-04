@@ -184,9 +184,15 @@ def _bind() -> None:
         u32.GetLastInputInfo.argtypes = [ctypes.POINTER(_LASTINPUTINFO)]
         u32.GetLastInputInfo.restype = ctypes.c_int
 
-        # GetTickCount() -> DWORD
-        k32.GetTickCount.argtypes = []
-        k32.GetTickCount.restype = ctypes.c_uint
+        # GetTickCount64() -> ULONGLONG
+        # GetTickCount wraps every 49.7d; GetTickCount64 doesn't wrap for
+        # 584 million years. We need this because GetLastInputInfo's dwTime
+        # is a 32-bit DWORD that wraps too — but we still subtract it from
+        # a 64-bit GetTickCount64 reading, which is the right shape: the
+        # 32-bit subtraction (after masking) gives correct deltas across
+        # the dwTime wrap, and the 64-bit "now" never gives wrong absolutes.
+        k32.GetTickCount64.argtypes = []
+        k32.GetTickCount64.restype = ctypes.c_uint64
 
         # SetThreadExecutionState(EXECUTION_STATE esFlags) -> EXECUTION_STATE
         k32.SetThreadExecutionState.argtypes = [ctypes.c_uint]
@@ -217,7 +223,8 @@ def prevent_sleep() -> int:
     and/or `send_f15` periodically. See `docs/windows-internals.md` §2.
     """
     _bind()
-    assert _kernel32 is not None  # _bind() raises on non-Windows
+    if _kernel32 is None:
+        raise RuntimeError("prevent_sleep called before successful _bind()")
     ctypes.set_last_error(0)
     flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
     prev = _kernel32.SetThreadExecutionState(flags)
@@ -236,7 +243,8 @@ def allow_sleep() -> int:
     management. Returns the previous EXECUTION_STATE bitmask.
     """
     _bind()
-    assert _kernel32 is not None
+    if _kernel32 is None:
+        raise RuntimeError("allow_sleep called before successful _bind()")
     ctypes.set_last_error(0)
     prev = _kernel32.SetThreadExecutionState(ES_CONTINUOUS)
     err = ctypes.get_last_error()
@@ -248,7 +256,8 @@ def allow_sleep() -> int:
 def _send(*inputs: _INPUT) -> int:
     """Push N INPUT events through SendInput; return how many were accepted."""
     _bind()
-    assert _user32 is not None
+    if _user32 is None:
+        raise RuntimeError("_send called before successful _bind()")
     n = len(inputs)
     arr_t = _INPUT * n
     arr = arr_t(*inputs)
@@ -301,8 +310,9 @@ def send_f15() -> None:
 def get_idle_seconds() -> float:
     """
     Return seconds since the last input event observed by the OS for the
-    current desktop session. Combines `GetLastInputInfo` and
-    `GetTickCount`, handling the 32-bit wraparound at ~49.7 days.
+    current desktop session. Combines `GetLastInputInfo` (32-bit dwTime)
+    and `GetTickCount64` (64-bit) for a delta that's robust across both
+    short uptimes and >49.7-day uptimes.
 
     Use this immediately after `send_mouse_jitter` / `send_f15` to
     self-verify that the injection was accepted. Expect a value < 1.0
@@ -311,15 +321,21 @@ def get_idle_seconds() -> float:
     (RDP disconnect, locked workstation, session 0 isolation).
     """
     _bind()
-    assert _user32 is not None and _kernel32 is not None
+    if _user32 is None or _kernel32 is None:
+        # Defensive: _bind() should have raised on non-Windows, but use
+        # explicit raises (not asserts) so `python -O` doesn't strip the
+        # check and produce a confusing AttributeError downstream.
+        raise RuntimeError("get_idle_seconds called before successful _bind()")
     info = _LASTINPUTINFO()
     info.cbSize = ctypes.sizeof(_LASTINPUTINFO)
     if _user32.GetLastInputInfo(ctypes.byref(info)) == 0:
         raise ctypes.WinError(ctypes.get_last_error())
 
-    now_ticks = _kernel32.GetTickCount()
-    # Both values are unsigned 32-bit; subtract modulo 2**32 to handle wrap.
-    delta_ms = (now_ticks - info.dwTime) & 0xFFFFFFFF
+    # GetTickCount64 doesn't wrap. info.dwTime is a 32-bit DWORD that
+    # wraps every 49.7d, so we mask the difference to handle that wrap
+    # using the low 32 bits of the 64-bit "now".
+    now_ms = _kernel32.GetTickCount64()
+    delta_ms = (now_ms - info.dwTime) & 0xFFFFFFFF
     return delta_ms / 1000.0
 
 

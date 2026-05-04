@@ -38,6 +38,14 @@ def current_target() -> str:
 
 
 def is_enabled() -> bool:
+    """True iff our Run-key entry points at the same executable as the
+    current process.
+
+    Compares only the executable portion (case-insensitively) rather than
+    the full command line, so a future version that adds CLI args (e.g.
+    `noidle.exe --start-minimized`) doesn't silently look "disabled" and
+    get over-written by the next enable() call.
+    """
     _require_windows()
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ) as key:
@@ -46,7 +54,20 @@ def is_enabled() -> bool:
         return False
     except OSError:
         return False
-    return str(data).strip() == current_target().strip()
+    stored = _first_token(str(data))
+    expected = _first_token(current_target())
+    return stored.casefold() == expected.casefold()
+
+
+def _first_token(cmdline: str) -> str:
+    """Extract the executable path from a Windows command line, handling
+    the `"C:\\Program Files\\noidle\\noidle.exe" --flag` quoting case."""
+    s = cmdline.strip()
+    if s.startswith('"'):
+        end = s.find('"', 1)
+        return s[1:end] if end > 0 else s[1:]
+    sp = s.find(" ")
+    return s if sp < 0 else s[:sp]
 
 
 def enable() -> None:

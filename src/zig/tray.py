@@ -51,6 +51,17 @@ _INTERVAL_PRESETS: list[tuple[str, float]] = [
     ("10 minutes", 600),
     ("30 minutes", 1800),
 ]
+_PRESET_SECONDS = {s for _, s in _INTERVAL_PRESETS}
+
+
+def _format_interval(secs: float) -> str:
+    """Pretty-print a custom interval value (e.g. config-edited 25s, 7m)."""
+    if secs >= 60 and secs % 60 == 0:
+        m = int(secs // 60)
+        return f"{m} minute{'s' if m != 1 else ''}"
+    if secs >= 60:
+        return f"{secs / 60:.1f} minutes"
+    return f"{int(secs)} seconds" if secs == int(secs) else f"{secs:.1f} seconds"
 
 _METHOD_PRESETS: list[tuple[str, Method]] = [
     ("Mouse only", "mouse"),
@@ -132,11 +143,26 @@ class TrayApp:
                 default=True,
             ),
             Menu.SEPARATOR,
-            MenuItem("Interval", Menu(*[
-                MenuItem(label, self._make_set_interval(s),
-                         checked=self._make_interval_checked(s), radio=True)
-                for label, s in _INTERVAL_PRESETS
-            ])),
+            MenuItem("Interval", Menu(
+                *[
+                    MenuItem(label, self._make_set_interval(s),
+                             checked=self._make_interval_checked(s), radio=True)
+                    for label, s in _INTERVAL_PRESETS
+                ],
+                # Custom (config-edited) interval shows up here when the
+                # user's value isn't a preset, so they can see "Custom (25s)
+                # ✓" instead of nothing being checked. Disabled — this is a
+                # display-only indicator; switching presets is how you exit
+                # the custom value.
+                MenuItem(
+                    lambda _i: f"Custom ({_format_interval(self.jiggler.interval_seconds)})",
+                    None,
+                    checked=lambda _i: self.jiggler.interval_seconds not in _PRESET_SECONDS,
+                    visible=lambda _i: self.jiggler.interval_seconds not in _PRESET_SECONDS,
+                    radio=True,
+                    enabled=False,
+                ),
+            )),
             MenuItem("Method", Menu(*[
                 MenuItem(label, self._make_set_method(m),
                          checked=self._make_method_checked(m), radio=True)
@@ -396,6 +422,10 @@ class TrayApp:
         # Set the shutdown flag FIRST so any in-flight callbacks short-circuit
         # before we start tearing things down.
         self._quitting.set()
+        # Bound the entire shutdown by spawning a watchdog that hard-kills
+        # the process if normal stop()s wedge (a common cause is a hotkey
+        # thread blocked on PostThreadMessageW that never receives WM_QUIT).
+        threading.Thread(target=self._shutdown_watchdog, daemon=True).start()
         try:
             if self._hotkey is not None:
                 try:
@@ -409,6 +439,17 @@ class TrayApp:
                 self._icon.stop()
             except Exception:
                 log.exception("icon.stop failed")
+
+    def _shutdown_watchdog(self, deadline_seconds: float = 8.0) -> None:
+        """If the process hasn't exited cleanly within `deadline_seconds`,
+        force os._exit. The threads we spawn (jiggler, hotkey, whats_new
+        worker, update worker) are all daemon=True, but daemon threads
+        wedged on a syscall (Win32 PostThreadMessageW or a TCP read) won't
+        actually let the process exit — Python waits for them.
+        """
+        time.sleep(deadline_seconds)
+        log.warning("shutdown watchdog: forcing os._exit after %.1fs", deadline_seconds)
+        os._exit(0)
 
     # ---- internals ------------------------------------------------------ #
 

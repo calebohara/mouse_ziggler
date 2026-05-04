@@ -9,6 +9,7 @@ Pure stdlib (tkinter + ttk) so the PyInstaller bundle stays small.
 """
 from __future__ import annotations
 
+import ctypes
 import logging
 import re
 import subprocess
@@ -242,9 +243,40 @@ def launch_whats_new_subprocess(
 show_whats_new_async = None  # type: ignore[assignment]
 
 
+def _enable_dpi_awareness() -> None:
+    """Opt the process into per-monitor DPI awareness BEFORE creating the
+    Tk root. Without this, tk dialogs are bitmap-scaled by Windows and
+    look blurry on HiDPI displays (200%+).
+
+    Tries SetProcessDpiAwarenessContext (Win10 1703+) first, then falls
+    back to the older shcore SetProcessDpiAwareness, then the very old
+    SetProcessDPIAware. All best-effort — silent on failure.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        # PROCESS_PER_MONITOR_DPI_AWARE_V2 = -4 cast to LONG_PTR
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)  # type: ignore[attr-defined]
+        return
+    except (AttributeError, OSError):
+        pass
+    try:
+        # PROCESS_PER_MONITOR_DPI_AWARE = 2
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
+        return
+    except (AttributeError, OSError):
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
 def _show(current: str, latest: str, notes: str, url: str) -> Choice:
     import tkinter as tk
     from tkinter import ttk
+
+    _enable_dpi_awareness()
 
     parsed = parse_release_notes(notes)
 
@@ -311,7 +343,17 @@ def _show(current: str, latest: str, notes: str, url: str) -> Choice:
             text.insert("end", f"  • {item}\n", "bullet")
 
     if not rendered_anything:
-        text.insert("end", "(No release notes provided.)\n", "empty")
+        text.insert(
+            "end",
+            "(This release didn't include a description.)\n\n",
+            "empty",
+        )
+        text.insert(
+            "end",
+            "Click Download to see the release on GitHub for full details, "
+            "or Remind me later to defer.\n",
+            "bullet",
+        )
 
     text.configure(state="disabled")
 

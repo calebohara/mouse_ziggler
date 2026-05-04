@@ -79,6 +79,35 @@ _EnumWindowsProc = ctypes.WINFUNCTYPE(
 ) if _IS_WINDOWS else None
 
 
+def _bind_screenshare_user32():
+    """Bind user32 once at module level instead of every call.
+
+    The previous implementation did `WinDLL("user32", use_last_error=True)`
+    plus the four argtype assignments inside `is_teams_screen_sharing`
+    every time. That added ~1-2ms per call AND allocated a fresh
+    WINFUNCTYPE callback per call — held only on the local stack — which
+    is technically GC-unsafe while EnumWindows is iterating (synchronous,
+    so OK in practice but fragile).
+
+    Returns None on non-Windows so the function still degrades cleanly.
+    """
+    if not _IS_WINDOWS:
+        return None
+    u32 = ctypes.WinDLL("user32", use_last_error=True)
+    u32.EnumWindows.argtypes = [_EnumWindowsProc, wintypes.LPARAM]
+    u32.EnumWindows.restype = wintypes.BOOL
+    u32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    u32.GetWindowTextLengthW.restype = ctypes.c_int
+    u32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    u32.GetWindowTextW.restype = ctypes.c_int
+    u32.IsWindowVisible.argtypes = [wintypes.HWND]
+    u32.IsWindowVisible.restype = wintypes.BOOL
+    return u32
+
+
+_user32 = _bind_screenshare_user32()
+
+
 # Heuristic chosen: match against the visible "You're sharing your screen"
 # floating callout that modern Teams (2024+ WebView2 client) renders as a
 # top-level window. Title text is the most stable, version-independent
@@ -112,32 +141,22 @@ def is_teams_screen_sharing() -> bool:
 
     Returns False on non-Windows platforms or on any Win32 error.
     """
-    if not _IS_WINDOWS:
+    if not _IS_WINDOWS or _user32 is None or _EnumWindowsProc is None:
         return False
-    assert _EnumWindowsProc is not None  # narrowing for mypy after platform guard
 
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        user32.EnumWindows.argtypes = [_EnumWindowsProc, wintypes.LPARAM]
-        user32.EnumWindows.restype = wintypes.BOOL
-        user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-        user32.GetWindowTextLengthW.restype = ctypes.c_int
-        user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-        user32.GetWindowTextW.restype = ctypes.c_int
-        user32.IsWindowVisible.argtypes = [wintypes.HWND]
-        user32.IsWindowVisible.restype = wintypes.BOOL
-
         found = ctypes.c_bool(False)
+        u32 = _user32  # local for closure speed; module-level cached binding
 
         def _cb(hwnd: int, _lparam: int) -> int:
             try:
-                if not user32.IsWindowVisible(hwnd):
+                if not u32.IsWindowVisible(hwnd):
                     return True  # keep enumerating
-                length = user32.GetWindowTextLengthW(hwnd)
+                length = u32.GetWindowTextLengthW(hwnd)
                 if length <= 0:
                     return True
                 buf = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(hwnd, buf, length + 1)
+                u32.GetWindowTextW(hwnd, buf, length + 1)
                 title = buf.value.lower()
                 if not title:
                     return True
@@ -152,8 +171,10 @@ def is_teams_screen_sharing() -> bool:
 
         proc = _EnumWindowsProc(_cb)
         # EnumWindows returns 0 if the callback returned 0 OR on error; both
-        # are fine for us — we only trust the `found` flag.
-        user32.EnumWindows(proc, 0)
+        # are fine for us — we only trust the `found` flag. The `proc`
+        # local stays alive across the synchronous EnumWindows call so the
+        # GC can't collect the WINFUNCTYPE callback mid-iteration.
+        u32.EnumWindows(proc, 0)
         return bool(found.value)
     except Exception:
         log.debug("is_teams_screen_sharing failed", exc_info=True)

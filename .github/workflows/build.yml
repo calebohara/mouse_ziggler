@@ -24,9 +24,11 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
+        # PyInstaller is pinned so a breaking PyInstaller release doesn't
+        # brick all builds at once. Bump deliberately (test locally first).
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
+          pip install -r requirements.txt "pyinstaller==6.11.1"
 
       - name: Generate icon (if not committed)
         shell: bash

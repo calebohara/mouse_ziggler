@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
-CURRENT_VERSION = "0.3.4"
+from . import __version__ as CURRENT_VERSION  # single source of truth
 
 _RELEASES_URL = "https://api.github.com/repos/calebohara/noidle.app/releases/latest"
 _ALLOWED_SCHEMES = ("https",)

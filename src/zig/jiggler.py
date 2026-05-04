@@ -120,13 +120,20 @@ class Jiggler:
             method = self.method
             smart = self.smart_pause
             pause_share = self.pause_on_screen_share
+            interval = self.interval_seconds
 
-        if smart and should_skip_for_user_activity():
+        # Smart-pause threshold scales with the interval so a tight 15s
+        # interval doesn't have its entire window swallowed by the
+        # default 5s smart-pause. min(5s, interval × 0.3) means at 15s
+        # we use 4.5s, at 10s we use 3s, at 60s+ we use the full 5s.
+        smart_pause_threshold = min(5.0, max(1.0, interval * 0.3))
+
+        if smart and should_skip_for_user_activity(smart_pause_threshold):
             with self._lock:
                 self._state.tick_count += 1
             if self.stats is not None:
                 self.stats.record_skip("active")
-            log.debug("tick skipped: user is active")
+            log.debug("tick skipped: user is active (threshold %.1fs)", smart_pause_threshold)
             self._notify()
             return
 

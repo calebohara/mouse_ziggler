@@ -53,8 +53,8 @@ Teams, Slack, and Windows all read the same idle counter, so a fresh idle counte
 
 ## Tray controls
 
-- **▶ Start / ⏸ Pause** — also bound to the global hotkey **Ctrl+Alt+Z**
-- **Interval** — 15s, 30s, 45s, 60s, 90s, 2m, 5m
+- **▶ Start / ⏸ Pause** — also bound to the global hotkey **Ctrl+Alt+Z** (rebindable in `config.json` to any `a`–`z` or `f1`–`f24`; `f13`–`f24` are the safest because no app uses them)
+- **Interval** — 15s, 30s, 45s, 60s, 90s, 2m, 5m, 10m, 30m (or any custom value via `config.json` — appears as "Custom (Ns)" in the menu)
 - **Method** — Mouse / Key (F15) / Both
 - **Smart pause when active** — skip a tick if you're already typing or moving the mouse (no surprise cursor twitches mid-click)
 - **Pause during Teams screen share** — auto-pauses while Teams is broadcasting your screen
@@ -155,6 +155,12 @@ pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-dat
 Output: `dist/noidle.exe`.
 
 ---
+
+## Security & known issues
+
+The codebase has been through a deep audit (5 specialist reviewers, 119 findings). v0.3.4 fixed 11 critical/high bugs; v0.3.5 fixed another 15 (Win32 robustness, single-instance guard, HiDPI dialog, F1–F24 hotkey support, smart-pause adaptive threshold, GetTickCount64 for >49-day uptimes, atexit cleanup so Ctrl+C doesn't leave the system pinned awake, and more).
+
+The remaining open items — most notably **no code signing** (your antivirus will warn, that's by design until/unless we get a cert), **MSI vs .exe registry collision**, and **Focus Assist swallowing tray notifications** — are tracked in [SECURITY.md](SECURITY.md) with severity, threat model, and fix sketches.
 
 ## License
 
