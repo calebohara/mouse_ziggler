@@ -26,6 +26,7 @@ class Config:
     autostart: bool = False
     check_for_updates: bool = True
     hotkey: str = "ctrl+alt+z"
+    skipped_version: str = ""
 
 
 def config_dir() -> Path:

@@ -7,7 +7,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
-CURRENT_VERSION = "0.3.0"
+CURRENT_VERSION = "0.3.1"
 
 _RELEASES_URL = "https://api.github.com/repos/calebohara/noidle.app/releases/latest"
 
@@ -20,6 +20,7 @@ class UpdateInfo:
     latest: str
     url: str
     is_newer: bool
+    body: str = ""  # Raw markdown release notes from GitHub
 
 
 def _parse_tuple(version: str) -> tuple[int, ...]:
@@ -74,11 +75,16 @@ def check_for_update(timeout: float = 5.0) -> Optional[UpdateInfo]:
     if not latest:
         return None
 
+    body = payload.get("body") or ""
+    if not isinstance(body, str):
+        body = ""
+
     return UpdateInfo(
         current=CURRENT_VERSION,
         latest=latest,
         url=url,
         is_newer=_is_newer(latest, CURRENT_VERSION),
+        body=body,
     )
 
 
