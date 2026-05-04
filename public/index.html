@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noidle.app — Stay active. Stay available.</title>
+  <meta name="description" content="A friendly Windows tray app that keeps your status fresh — so the green dot in Microsoft Teams stays green and your machine doesn't drift into Away.">
+  <meta name="theme-color" content="#2ecc71">
+
+  <meta property="og:title" content="noidle.app — Stay active. Stay available.">
+  <meta property="og:description" content="A friendly Windows tray app that keeps the green dot in Microsoft Teams green — and your machine awake — without nagging you.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://noidle.app">
+  <meta name="twitter:card" content="summary">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%232ecc71' stroke='%23222' stroke-width='2'/%3E%3C/svg%3E">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --green: #2ecc71;
+      --green-dark: #27ae60;
+      --ink: #1a1a1a;
+      --muted: #5b6470;
+      --line: #e6e9ee;
+      --bg: #fafbfc;
+      --card: #ffffff;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
+    }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    a { color: var(--green-dark); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; background: #f1f3f5; padding: 0.1em 0.4em; border-radius: 3px; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+    header {
+      padding: 80px 0 40px;
+      text-align: center;
+    }
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--ink);
+      margin-bottom: 32px;
+    }
+    .dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.18);
+    }
+    h1 {
+      font-size: clamp(36px, 6vw, 56px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin: 0 0 16px;
+    }
+    .tag {
+      font-size: clamp(17px, 2.4vw, 20px);
+      color: var(--muted);
+      margin: 0 auto 36px;
+      max-width: 540px;
+    }
+
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--green);
+      color: white;
+      font-weight: 600;
+      font-size: 16px;
+      padding: 14px 22px;
+      border-radius: 10px;
+      box-shadow: 0 6px 16px rgba(46, 204, 113, 0.35);
+      transition: transform 0.08s ease, box-shadow 0.2s ease;
+    }
+    .cta:hover { text-decoration: none; transform: translateY(-1px); box-shadow: 0 10px 22px rgba(46, 204, 113, 0.45); }
+    .cta:active { transform: translateY(0); }
+    .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+    .cta.ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+    .cta.ghost:hover { background: white; box-shadow: var(--shadow); }
+    .platform { font-size: 13px; color: var(--muted); margin-top: 18px; }
+
+    section { padding: 56px 0; border-top: 1px solid var(--line); }
+    section h2 {
+      font-size: 22px;
+      letter-spacing: -0.01em;
+      margin: 0 0 20px;
+    }
+    section p { color: var(--ink); margin: 0 0 14px; }
+
+    .steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin-top: 22px;
+    }
+    .step {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .step h3 { margin: 0 0 6px; font-size: 16px; }
+    .step p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    .features {
+      list-style: none;
+      padding: 0;
+      margin: 18px 0 0;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .features li {
+      padding: 10px 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    .features b { color: var(--ink); }
+    .features span { color: var(--muted); }
+
+    .limits {
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-top: 18px;
+      font-size: 15px;
+    }
+    .limits b { color: #8a6d00; }
+
+    footer {
+      padding: 40px 0 60px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+    footer a { color: var(--muted); text-decoration: underline; }
+
+    @media (min-width: 640px) {
+      .features { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="logo"><span class="dot" aria-hidden="true"></span> noidle.app</div>
+      <h1>Stay active. Stay&nbsp;available.</h1>
+      <p class="tag">A friendly Windows tray app that keeps the green dot in Microsoft Teams green — and your machine awake — without nagging you.</p>
+      <div class="cta-row">
+        <a class="cta" href="https://github.com/calebohara/noidle.app/releases/latest/download/noidle.exe">
+          <span aria-hidden="true">⬇</span> Download for Windows
+        </a>
+        <a class="cta ghost" href="https://github.com/calebohara/noidle.app/releases/latest/download/noidle.msi">.msi installer</a>
+      </div>
+      <p class="platform">Windows 10 / 11 · single-file <code>.exe</code> or per-user <code>.msi</code> · MIT</p>
+    </div>
+  </header>
+
+  <section>
+    <div class="wrap">
+      <h2>How it works</h2>
+      <p>Every ~45 seconds (configurable, randomized so it doesn't look mechanical), noidle.app does three small things:</p>
+      <div class="steps">
+        <div class="step">
+          <h3>1. A whisper of input</h3>
+          <p>It nudges the cursor by one pixel and presses an invisible key the OS counts as activity. Nothing visible happens on screen.</p>
+        </div>
+        <div class="step">
+          <h3>2. Wakelock</h3>
+          <p>It pins your display and system awake so they don't sleep underneath you mid-thought.</p>
+        </div>
+        <div class="step">
+          <h3>3. Self-check</h3>
+          <p>It reads back the same idle counter Teams checks. If the nudge didn't take, it logs a warning instead of silently lying to you.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Polite by default</h2>
+      <ul class="features">
+        <li><b>Smart pause</b> <span>— skips the nudge when you're already typing</span></li>
+        <li><b>Screen-share aware</b> <span>— pauses while you're presenting in Teams</span></li>
+        <li><b>Start with Windows</b> <span>— one-click toggle, no admin needed</span></li>
+        <li><b>Global hotkey</b> <span>— Ctrl+Alt+Z to start or pause</span></li>
+        <li><b>"What's new" updates</b> <span>— quiet popup with friendly release notes</span></li>
+        <li><b>Stats &amp; logs</b> <span>— uptime, ticks, full log file</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Honest about its limits</h2>
+      <p>noidle.app keeps you Available while you're at the desk but stepped away from the mouse. It can't override:</p>
+      <div class="limits">
+        <b>Locked workstation</b> · <b>Outlook calendar status</b> · <b>Corporate EDR / monitoring tools</b> · <b>Disconnected RDP</b>
+        <p style="margin: 12px 0 0; color: #8a6d00;">If you need stealth against employee-monitoring software, you need hardware (a microcontroller flashed with HID firmware) — that's on the v2 roadmap.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <p>
+        <a href="https://github.com/calebohara/noidle.app">GitHub</a> ·
+        <a href="https://github.com/calebohara/noidle.app/releases">All releases</a> ·
+        <a href="https://github.com/calebohara/noidle.app/blob/main/LICENSE">MIT License</a>
+      </p>
+      <p>© 2026 Caleb O'Hara. Built with care, not magic.</p>
+    </div>
+  </footer>
+</body>
+</html>
