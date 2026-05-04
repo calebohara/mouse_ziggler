@@ -203,6 +203,7 @@ def prevent_sleep() -> int:
     and/or `send_f15` periodically. See `docs/windows-internals.md` §2.
     """
     _bind()
+    assert _kernel32 is not None  # _bind() raises on non-Windows
     flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
     prev = _kernel32.SetThreadExecutionState(flags)
     if prev == 0:
@@ -216,6 +217,7 @@ def allow_sleep() -> int:
     management. Returns the previous EXECUTION_STATE bitmask.
     """
     _bind()
+    assert _kernel32 is not None
     prev = _kernel32.SetThreadExecutionState(ES_CONTINUOUS)
     if prev == 0:
         raise ctypes.WinError(ctypes.get_last_error())
@@ -225,6 +227,7 @@ def allow_sleep() -> int:
 def _send(*inputs: _INPUT) -> int:
     """Push N INPUT events through SendInput; return how many were accepted."""
     _bind()
+    assert _user32 is not None
     n = len(inputs)
     arr_t = _INPUT * n
     arr = arr_t(*inputs)
@@ -287,6 +290,7 @@ def get_idle_seconds() -> float:
     (RDP disconnect, locked workstation, session 0 isolation).
     """
     _bind()
+    assert _user32 is not None and _kernel32 is not None
     info = _LASTINPUTINFO()
     info.cbSize = ctypes.sizeof(_LASTINPUTINFO)
     if _user32.GetLastInputInfo(ctypes.byref(info)) == 0:
