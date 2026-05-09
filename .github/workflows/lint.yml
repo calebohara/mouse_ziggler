@@ -33,4 +33,7 @@ jobs:
         # get_last_error) resolve from typeshed instead of being flagged
         # missing on the Linux runner. --ignore-missing-imports for pystray
         # which ships no py.typed marker.
-        run: mypy --platform win32 --ignore-missing-imports src noidle.py
+        # noidle.py (entry point) is excluded to avoid a "duplicate module named
+        # noidle" conflict with src/noidle/__init__.py. The entry point is a
+        # thin runner; all meaningful logic lives in src/noidle/ and is checked.
+        run: mypy --platform win32 --ignore-missing-imports src
