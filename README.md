@@ -194,7 +194,7 @@ Deep dives:
 
 ## Building yourself
 
-A push of a tag like `v0.3.7` triggers `.github/workflows/build.yml`, which runs on a `windows-latest` GitHub Actions runner, builds with PyInstaller, packages a per-user MSI with WiX v4, generates SHA256 checksums + cosign keyless signatures, and attaches all artifacts to a GitHub Release. To build the `.exe` locally on Windows:
+A push of a tag like `v0.3.8` triggers `.github/workflows/build.yml`, which runs on a `windows-latest` GitHub Actions runner, builds with PyInstaller, packages a per-user MSI with WiX v4, generates SHA256 checksums + cosign keyless signatures, and attaches all artifacts to a GitHub Release. To build the `.exe` locally on Windows:
 
 ```powershell
 pip install "pyinstaller==6.11.1"
@@ -211,7 +211,7 @@ Output: `dist/noidle.exe`.
 
 ## Security & known issues
 
-The codebase has been through a deep audit — 5 specialist reviewers, 119 findings across concurrency, security, Win32, packaging, and UX. As of v0.3.7 + post-release fixes, **43 critical/high audit findings have been resolved** across v0.3.4–v0.3.7:
+The codebase has been through a deep audit — 5 specialist reviewers, 119 findings across concurrency, security, Win32, packaging, and UX. As of v0.3.8, **43 critical/high audit findings have been resolved** across v0.3.4–v0.3.8:
 
 - **v0.3.4 (11 fixes)**: tkinter-on-thread crash → subprocess; shell injection in update-readme.yml; URL scheme whitelist; rate-limited update checks; "Skip this version" floor semantics; hotkey-failure visibility; smoke gate for empty release notes.
 - **v0.3.5 (15 fixes)**: GetTickCount64 (no 49.7d wraparound); F1–F24 hotkey support; single-instance mutex; atexit cleanup so Ctrl+C doesn't pin the system awake; HiDPI-aware dialogs; bounded shutdown watchdog; install-mode-aware skipped_version floor.
