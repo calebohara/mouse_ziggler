@@ -303,4 +303,4 @@ may earn a closer look. Sign the binary if shipping to managed fleets.
 4. On shutdown: `SetThreadExecutionState(ES_CONTINUOUS)` to clear flags.
 5. Cross-check externally with `powercfg /requests` (elevated).
 
-That recipe is implemented in `src/zig/winapi.py`.
+That recipe is implemented in `src/noidle/winapi.py`.

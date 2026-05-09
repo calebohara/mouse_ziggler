@@ -8,7 +8,7 @@ import threading
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-log = logging.getLogger("zig.config")
+log = logging.getLogger("noidle.config")
 
 # Process-wide lock for save(). Multiple threads (tray menu callbacks +
 # the What's New worker writing skipped_version) can race in here; without
@@ -119,19 +119,19 @@ def save(config: Config) -> None:
         log.debug("config saved to %s", path)
 
 
-# INTEGRATION: tray.py / __main__.py / jiggler.py wiring for v0.2.0
-# INTEGRATION: __main__.py — load on startup and pass into Jiggler:
+# INTEGRATION: tray.py / __main__.py / engine.py wiring for v0.2.0
+# INTEGRATION: __main__.py — load on startup and pass into Engine:
 # INTEGRATION:   from .config import load as load_config, save as save_config
 # INTEGRATION:   cfg = load_config()
-# INTEGRATION:   jiggler = Jiggler(interval_seconds=cfg.interval_seconds, method=cfg.method)
-# INTEGRATION:   tray = Tray(jiggler=jiggler, config=cfg, on_config_change=save_config)
+# INTEGRATION:   engine = Engine(interval_seconds=cfg.interval_seconds, method=cfg.method)
+# INTEGRATION:   tray = Tray(engine=engine, config=cfg, on_config_change=save_config)
 # INTEGRATION:
 # INTEGRATION: tray.py — call save_config(cfg) whenever the user toggles a menu item:
 # INTEGRATION:   def _on_set_method(self, method: str) -> None:
-# INTEGRATION:       self.jiggler.set_method(method); self.config.method = method
+# INTEGRATION:       self.engine.set_method(method); self.config.method = method
 # INTEGRATION:       save_config(self.config)
 # INTEGRATION:   def _on_set_interval(self, seconds: float) -> None:
-# INTEGRATION:       self.jiggler.set_interval(seconds); self.config.interval_seconds = seconds
+# INTEGRATION:       self.engine.set_interval(seconds); self.config.interval_seconds = seconds
 # INTEGRATION:       save_config(self.config)
 # INTEGRATION:   Same pattern for smart_pause, pause_on_screen_share, autostart,
 # INTEGRATION:   check_for_updates, hotkey — mutate self.config then save_config(self.config).
@@ -140,7 +140,7 @@ def save(config: Config) -> None:
 # INTEGRATION:   from .config import config_path
 # INTEGRATION:   os.startfile(config_path().parent)   # Windows
 # INTEGRATION:
-# INTEGRATION: jiggler.py — no changes required; existing set_interval / set_method
+# INTEGRATION: engine.py — no changes required; existing set_interval / set_method
 # INTEGRATION:   already enforce the same MIN_INTERVAL_S=1.0 and method whitelist.
 # INTEGRATION:
 # INTEGRATION: hotkey module (when added) should call cfg.hotkey to read the binding;

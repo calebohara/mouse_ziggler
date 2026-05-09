@@ -25,7 +25,7 @@ _ALLOWED_SCHEMES = ("https",)
 _ALLOWED_HOSTS = ("github.com", "www.github.com")
 _BODY_MAX_BYTES = 64 * 1024  # don't render arbitrary-size release bodies in the dialog
 
-log = logging.getLogger("zig.updater")
+log = logging.getLogger("noidle.updater")
 
 
 @dataclass
@@ -50,6 +50,8 @@ def _parse_tuple(version: str) -> tuple[int, ...]:
         if not digits:
             return tuple(parts)
         parts.append(int(digits))
+        if len(digits) < len(chunk):
+            return tuple(parts)
     return tuple(parts)
 
 

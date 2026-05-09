@@ -147,7 +147,7 @@ def disable() -> None:
 
 
 # INTEGRATION:
-# In src/zig/tray.py, add `from .autostart import is_enabled, enable, disable, current_target`.
+# In src/noidle/tray.py, add `from .autostart import is_enabled, enable, disable, current_target`.
 # Add a checkable MenuItem under the Method submenu separator:
 #     MenuItem(
 #         "Start with Windows",

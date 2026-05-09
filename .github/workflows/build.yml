@@ -40,11 +40,11 @@ jobs:
           fi
 
       - name: Build with PyInstaller
-        # --collect-submodules zig replaces the brittle hand-maintained list of
-        # --hidden-import flags. Adding a new src/zig/foo.py module is now picked
+        # --collect-submodules noidle replaces the brittle hand-maintained list of
+        # --hidden-import flags. Adding a new src/noidle/foo.py module is now picked
         # up automatically by the bundle (and by the smoke test, which uses
         # pkgutil.iter_modules to mirror the same discovery).
-        run: pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --paths src --collect-submodules zig noidle.py
+        run: pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --paths src --collect-submodules noidle noidle.py
 
       - name: Smoke-test built .exe (--smoke imports everything and exits 0)
         # --noconsole strips stdout from the .exe; we ALSO build a console
@@ -57,7 +57,7 @@ jobs:
           if (-not (Test-Path $exe)) { Write-Error "Build produced no exe"; exit 1 }
 
           # Build a parallel console-mode exe purely for capturing smoke output.
-          pyinstaller --onefile --console --name noidle-debug --paths src --collect-submodules zig noidle.py
+          pyinstaller --onefile --console --name noidle-debug --paths src --collect-submodules noidle noidle.py
           $dbg = "dist/noidle-debug.exe"
           if (-not (Test-Path $dbg)) { Write-Error "Debug exe build failed"; exit 1 }
 

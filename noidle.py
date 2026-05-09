@@ -71,7 +71,7 @@ def _install_cleanup_handlers() -> None:
 
     def _cleanup(*_a) -> None:
         try:
-            from zig.winapi import allow_sleep
+            from noidle.winapi import allow_sleep
             allow_sleep()
         except Exception:
             pass
@@ -113,16 +113,16 @@ def _write_crash(exc: BaseException) -> Path:
     return p
 
 
-def _enumerate_zig_modules() -> list[str]:
-    """Discover every src/zig/*.py module via pkgutil so the smoke test
+def _enumerate_noidle_modules() -> list[str]:
+    """Discover every src/noidle/*.py module via pkgutil so the smoke test
     catches a future module that someone forgot to add to a hand-curated
-    list. Mirrors what `--collect-submodules zig` does in PyInstaller.
+    list. Mirrors what `--collect-submodules noidle` does in PyInstaller.
     """
     import pkgutil
-    import zig
+    import noidle
     return sorted(
-        f"zig.{m.name}"
-        for m in pkgutil.iter_modules(zig.__path__)
+        f"noidle.{m.name}"
+        for m in pkgutil.iter_modules(noidle.__path__)
         if not m.ispkg and not m.name.startswith("_")
     )
 
@@ -136,45 +136,45 @@ def _smoke() -> int:
       - Missing-symbol regressions in winapi
       - send_mouse_jitter signature drift
       - Markdown parser regressions (incl. empty-release-notes case)
-      - Newly-added zig.* modules failing to import in the bundle
-      - Version mismatch between pyproject.toml and zig.__version__
+      - Newly-added noidle.* modules failing to import in the bundle
+      - Version mismatch between pyproject.toml and noidle.__version__
 
     Uses explicit if/raise instead of bare assert so python -O cannot
     silently strip the checks and return a false-positive exit 0.
     """
     import importlib
 
-    # Discover and import every zig.* submodule.
-    for name in _enumerate_zig_modules():
+    # Discover and import every noidle.* submodule.
+    for name in _enumerate_noidle_modules():
         try:
             importlib.import_module(name)
         except Exception as exc:
             print(f"smoke FAIL: cannot import {name}: {exc!r}", flush=True)
             return 4
 
-    import zig.config
-    import zig.hotkey
-    import zig.jiggler
-    import zig.stats
-    import zig.updater
-    import zig.whats_new
-    import zig.winapi
+    import noidle.config
+    import noidle.hotkey
+    import noidle.engine
+    import noidle.stats
+    import noidle.updater
+    import noidle.whats_new
+    import noidle.winapi
 
     # Version consistency — only runs from source; pyproject.toml is absent
     # in PyInstaller bundles so the check is silently skipped there.
-    # Update BOTH pyproject.toml and src/zig/__init__.py at each release.
+    # Update BOTH pyproject.toml and src/noidle/__init__.py at each release.
     _pyproject = Path(__file__).parent / "pyproject.toml"
     if _pyproject.exists():
         import tomllib
         with _pyproject.open("rb") as _f:
             _toml_ver = tomllib.load(_f)["project"]["version"]
-        from zig import __version__ as _zig_ver
-        if _zig_ver != _toml_ver:
-            print(f"smoke FAIL: zig.__version__={_zig_ver!r} != pyproject.toml={_toml_ver!r}", flush=True)
+        from noidle import __version__ as _noidle_ver
+        if _noidle_ver != _toml_ver:
+            print(f"smoke FAIL: noidle.__version__={_noidle_ver!r} != pyproject.toml={_toml_ver!r}", flush=True)
             return 5
 
     # Markdown parser sanity (categorized release body).
-    parsed = zig.whats_new.parse_release_notes(
+    parsed = noidle.whats_new.parse_release_notes(
         "## What's Changed\n"
         "* feat: foo by @x in #1\n"
         "* fix: bar by @y in #2\n"
@@ -188,7 +188,7 @@ def _smoke() -> int:
     # Empty-release-notes case (the v0.3.0/v0.3.3 actual scenario): the
     # parser must not throw and must produce an empty grouping the dialog
     # can render as "(No release notes provided.)".
-    empty = zig.whats_new.parse_release_notes("")
+    empty = noidle.whats_new.parse_release_notes("")
     if not all(not v for v in empty.sections.values()):
         raise AssertionError(f"Empty parse non-empty sections: {empty.sections}")
     if empty.other:
@@ -196,7 +196,7 @@ def _smoke() -> int:
 
     # GitHub's just-Full-Changelog body (the "no merged PRs" case): same
     # as empty after the parser strips the trailer.
-    only_changelog = zig.whats_new.parse_release_notes(
+    only_changelog = noidle.whats_new.parse_release_notes(
         "**Full Changelog**: https://github.com/x/y/compare/v0.3.3...v0.3.4\n"
     )
     if not all(not v for v in only_changelog.sections.values()):
@@ -204,10 +204,10 @@ def _smoke() -> int:
     if only_changelog.other:
         raise AssertionError(f"Changelog-only parse has other: {only_changelog.other}")
 
-    # Jiggler API surface.
-    j = zig.jiggler.Jiggler(interval_seconds=10.0, method="both")
+    # Engine API surface.
+    j = noidle.engine.Engine(interval_seconds=10.0, method="both")
     if j.state.running is not False:
-        raise AssertionError("Jiggler.state.running should be False on init")
+        raise AssertionError("Engine.state.running should be False on init")
     j.set_interval(20.0)
     j.set_method("mouse")
     j.set_smart_pause(False)
@@ -218,18 +218,18 @@ def _smoke() -> int:
     # Win32 surface.
     for name in ("prevent_sleep", "allow_sleep", "send_mouse_jitter",
                  "send_f15", "get_idle_seconds"):
-        if not hasattr(zig.winapi, name):
-            print(f"smoke FAIL: zig.winapi missing {name}", flush=True)
+        if not hasattr(noidle.winapi, name):
+            print(f"smoke FAIL: noidle.winapi missing {name}", flush=True)
             return 2
 
     import inspect
-    sig = inspect.signature(zig.winapi.send_mouse_jitter)
+    sig = inspect.signature(noidle.winapi.send_mouse_jitter)
     if len(sig.parameters) != 0:
         print(f"smoke FAIL: send_mouse_jitter has params {sig}", flush=True)
         return 3
 
     # Config surface (all fields the tray expects).
-    cfg = zig.config.load()
+    cfg = noidle.config.load()
     for field_name in ("interval_seconds", "method", "smart_pause",
                        "pause_on_screen_share", "autostart", "hotkey",
                        "skipped_version", "last_update_check_at",
@@ -238,35 +238,35 @@ def _smoke() -> int:
             raise AssertionError(f"Config missing {field_name}")
 
     # Hotkey parser.
-    mods, vk = zig.hotkey.parse_hotkey("ctrl+alt+z")
+    mods, vk = noidle.hotkey.parse_hotkey("ctrl+alt+z")
     if not (mods != 0 and vk != 0):
         raise AssertionError(f"parse_hotkey returned zero values: mods={mods} vk={vk}")
 
     # Updater rate-limit + offerable helpers.
-    if zig.updater.should_check_now(0, False) is not True:
+    if noidle.updater.should_check_now(0, False) is not True:
         raise AssertionError("should_check_now(0, False) should be True")
-    if zig.updater.should_check_now(__import__("time").time(), False) is not False:
+    if noidle.updater.should_check_now(__import__("time").time(), False) is not False:
         raise AssertionError("should_check_now(now, False) should be False")
-    if zig.updater.is_offerable("0.4.0", "") is not True:
+    if noidle.updater.is_offerable("0.4.0", "") is not True:
         raise AssertionError("is_offerable('0.4.0', '') should be True")
-    if zig.updater.is_offerable("0.4.0", "0.4.0") is not False:
+    if noidle.updater.is_offerable("0.4.0", "0.4.0") is not False:
         raise AssertionError("is_offerable('0.4.0', '0.4.0') should be False")
-    if zig.updater.is_offerable("0.4.1", "0.4.0") is not True:
+    if noidle.updater.is_offerable("0.4.1", "0.4.0") is not True:
         raise AssertionError("is_offerable('0.4.1', '0.4.0') should be True")
-    if zig.updater._is_safe_release_url("https://github.com/x/y/releases/tag/v1") is not True:
+    if noidle.updater._is_safe_release_url("https://github.com/x/y/releases/tag/v1") is not True:
         raise AssertionError("safe URL should be True")
-    if zig.updater._is_safe_release_url("javascript:alert(1)") is not False:
+    if noidle.updater._is_safe_release_url("javascript:alert(1)") is not False:
         raise AssertionError("javascript: URL should be False")
-    if zig.updater._is_safe_release_url("file:///etc/passwd") is not False:
+    if noidle.updater._is_safe_release_url("file:///etc/passwd") is not False:
         raise AssertionError("file: URL should be False")
 
     # Stats.
-    s = zig.stats.Stats()
+    s = noidle.stats.Stats()
     s.started()
-    s.record_jiggle()
+    s.record_tick()
     s.record_skip("active")
-    if "Jiggles" not in s.summary():
-        raise AssertionError(f"Stats.summary() missing 'Jiggles': {s.summary()!r}")
+    if "Ticks" not in s.summary():
+        raise AssertionError(f"Stats.summary() missing 'Ticks': {s.summary()!r}")
     s.reset()
 
     print("smoke ok", flush=True)
@@ -277,7 +277,7 @@ def main() -> int:
     if "--smoke" in sys.argv:
         return _smoke()
     if "--version" in sys.argv:
-        from zig import __version__ as v
+        from noidle import __version__ as v
         print(f"noidle.app {v}", flush=True)
         return 0
     if "--whats-new" in sys.argv:
@@ -285,13 +285,13 @@ def main() -> int:
         # spawns this child to show the update dialog without violating
         # tkinter's main-thread-only contract. NB: this child must NOT
         # acquire the single-instance mutex — the parent already owns it.
-        from zig.whats_new import run_subprocess_dialog
+        from noidle.whats_new import run_subprocess_dialog
         return run_subprocess_dialog()
     if "--info-dialog" in sys.argv:
         # Subprocess entry for important alerts that can't rely on
         # Shell_NotifyIcon balloons (Win11 Focus Assist filters them).
         # Reads {title, message} JSON from stdin.
-        from zig.whats_new import run_info_dialog
+        from noidle.whats_new import run_info_dialog
         return run_info_dialog("", "")
 
     # Single-instance guard for the actual tray (not for --smoke /
@@ -320,7 +320,7 @@ def main() -> int:
     # it explicitly — when the process exits the OS reclaims the handle.)
     globals()["__single_instance_handle__"] = handle
 
-    from zig.tray import run_tray
+    from noidle.tray import run_tray
     run_tray()
     return 0
 

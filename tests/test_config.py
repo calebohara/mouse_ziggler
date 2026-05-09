@@ -1,5 +1,5 @@
-"""Tests for zig.config — config loading, coercion, and save/load round-trips."""
-from zig.config import Config, _coerce, load, save
+"""Tests for noidle.config — config loading, coercion, and save/load round-trips."""
+from noidle.config import Config, _coerce, load, save
 
 
 class TestCoerce:

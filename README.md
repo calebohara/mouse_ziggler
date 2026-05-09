@@ -38,12 +38,12 @@ Published: `2026-05-09T21:26:30Z`
 * **HIGH-2** — all GitHub Actions pinned to immutable commit SHAs (`build.yml`, `lint.yml`, `update-readme.yml`). Mutable major-version tags removed.
 
 ### Added
-* **pytest suite** — 5 platform-independent test modules: updater, hotkey, config, whats_new, jiggler. Runs on Linux/macOS/Windows CI with no Win32 calls.
-* **Smoke version check** — `_smoke()` reads `pyproject.toml` via `tomllib` and fails fast on `zig.__version__` mismatch.
+* **pytest suite** — 5 platform-independent test modules: updater, hotkey, config, whats_new, engine. Runs on Linux/macOS/Windows CI with no Win32 calls.
+* **Smoke version check** — `_smoke()` reads `pyproject.toml` via `tomllib` and fails fast on `noidle.__version__` mismatch.
 * **Landing page** — `og:image` corrected to `https://noidle.app/og.svg`; CSP + `X-Frame-Options` headers; live taskbar date.
 
 ### Fixed
-* `jiggler.start()` — `_state.running = True` moved after `prevent_sleep()` to prevent stuck "running" state on Win32 error.
+* `engine.start()` — `_state.running = True` moved after `prevent_sleep()` to prevent stuck "running" state on Win32 error.
 * `HotkeyListener.start()` — raises `TimeoutError` after 5 s instead of silently leaking the thread.
 * `packaging` added to dependencies — fixes pre-release version comparison (`0.4.0-rc.1` wrongly treated as newer than `0.4.0`).
 * Smoke-test bare `assert` → `if/raise AssertionError` so `python -O` doesn't strip checks.
@@ -80,7 +80,7 @@ Teams, Slack, and Windows all read the same idle counter, so a fresh idle counte
 - **Check for updates on launch** — pings the GitHub Releases API and notifies you if there's a newer version
 - **Show stats** — uptime, total ticks, skipped (active / screenshare)
 - **Show idle time** — current `GetLastInputInfo` reading (handy for sanity-checking)
-- **Open log / Open data folder** — jumps to `%LOCALAPPDATA%\noidle\zig.log` and `%APPDATA%\noidle\`
+- **Open log / Open data folder** — jumps to `%LOCALAPPDATA%\noidle\noidle.log` and `%APPDATA%\noidle\`
 - **Quit**
 
 All settings persist atomically to `%APPDATA%\noidle\config.json` (write-then-rename, so a crash mid-write can't corrupt the file).
@@ -106,7 +106,7 @@ pip install pytest
 pytest tests/ -v
 ```
 
-Covers: version comparison, URL safety, rate limiting, config coercion + round-trips, hotkey parsing, release-note parsing, and jiggler API validation.
+Covers: version comparison, URL safety, rate limiting, config coercion + round-trips, hotkey parsing, release-note parsing, and engine API validation.
 
 ### Confirming it's working
 ```powershell
@@ -155,10 +155,10 @@ Full instructions in **[SIGNING.md](SIGNING.md)**. Source is in this repo — re
 ## Architecture
 
 ```
-src/zig/
+src/noidle/
 ├── __init__.py      # __version__ — single source of truth for version
 ├── winapi.py        # ctypes wrappers: SendInput, SetThreadExecutionState, GetLastInputInfo, GetTickCount64
-├── jiggler.py       # threaded engine, ±20% interval randomization, adaptive smart-pause
+├── engine.py        # threaded engine, ±20% interval randomization, adaptive smart-pause
 ├── tray.py          # pystray UI, dynamic icon, runtime config, bounded shutdown watchdog
 ├── config.py        # atomic JSON persistence (%APPDATA%\noidle\config.json), thread-safe
 ├── autostart.py     # HKCU\Run toggle, install-mode aware (MSI vs portable distinct values)
@@ -173,7 +173,7 @@ tests/
 ├── conftest.py          # adds src/ to sys.path
 ├── test_config.py       # coercion rules, load/save round-trips, corrupt JSON fallback
 ├── test_hotkey.py       # parse_hotkey: valid combos, F-key range, error paths
-├── test_jiggler.py      # Jiggler API surface, set_interval/set_method validation
+├── test_engine.py       # Engine API surface, set_interval/set_method validation
 ├── test_updater.py      # version comparison, URL safety, rate limiting, is_offerable
 └── test_whats_new.py    # parse_release_notes: categories, trailer stripping, attribution removal
 public/
@@ -201,7 +201,7 @@ pip install "pyinstaller==6.11.1"
 python scripts/make_icon.py   # only if assets/icon.ico is missing
 pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico `
             --add-data "assets;assets" --paths src `
-            --collect-submodules zig `
+            --collect-submodules noidle `
             noidle.py
 ```
 
@@ -218,7 +218,7 @@ The codebase has been through a deep audit — 5 specialist reviewers, 119 findi
 - **v0.3.6 + v0.3.7 (15 fixes)**: install-mode-aware autostart (MSI vs portable distinct registry values, no more collisions); cosign keyless signing for every release artifact via GitHub OIDC; SHA256SUMS.txt for tamper-evidence; startup-critical alerts use Tk dialog instead of Focus-Assist-swallowed tray balloons.
 - **v0.3.8 (2 security fixes + reliability)**: HIGH-1 symlink/junction guard on log directory writes (`logging_setup.py`, `noidle.py`); HIGH-2 all GitHub Actions SHA-pinned to commit SHAs across all three workflow files.
 
-Additional reliability fixes on main (not audit items): `jiggler.start()` state corruption on `prevent_sleep()` failure; `HotkeyListener` registration timeout race; `packaging` library added to dependencies (fixes pre-release version comparison in updater fallback path); smoke test `assert` statements hardened against `python -O`; version consistency check added.
+Additional reliability fixes on main (not audit items): `engine.start()` state corruption on `prevent_sleep()` failure; `HotkeyListener` registration timeout race; `packaging` library added to dependencies (fixes pre-release version comparison in updater fallback path); smoke test `assert` statements hardened against `python -O`; version consistency check added.
 
 Remaining open items are tracked in [SECURITY.md](SECURITY.md):
 - **CRIT-A** — Authenticode code signing (still open; cosign + SHA256 are shipped, but SmartScreen needs Authenticode). [SignPath.io OSS](https://signpath.io/foundation) application is the path forward.

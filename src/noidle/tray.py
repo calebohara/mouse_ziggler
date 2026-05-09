@@ -20,7 +20,7 @@ from .autostart import enable as autostart_enable
 from .autostart import is_enabled as autostart_is_enabled
 from .config import Config, config_path, load as load_config, save as save_config
 from .hotkey import HotkeyListener
-from .jiggler import Jiggler, JigglerState, Method
+from .engine import Engine, EngineState, Method
 from .logging_setup import log_dir, setup_file_logging
 from .stats import Stats
 from .updater import (
@@ -33,7 +33,7 @@ from .updater import (
 from .whats_new import launch_info_dialog_subprocess, launch_whats_new_subprocess, mock_for_preview
 from .winapi import get_idle_seconds
 
-log = logging.getLogger("zig.tray")
+log = logging.getLogger("noidle.tray")
 
 _ICON_SIZE = 64
 _ACTIVE_RGB: Tuple[int, int, int] = (46, 204, 113)
@@ -113,13 +113,13 @@ def _open_path(p: Path) -> None:
 
 
 class TrayApp:
-    def __init__(self, jiggler: Jiggler, config: Config, log_path: Path) -> None:
-        self.jiggler = jiggler
+    def __init__(self, engine: Engine, config: Config, log_path: Path) -> None:
+        self.engine = engine
         self.config = config
         self.log_path = log_path
         self.stats = Stats()
-        self.jiggler.stats = self.stats
-        self.jiggler.on_state_change = self._on_state_change
+        self.engine.stats = self.stats
+        self.engine.on_state_change = self._on_state_change
 
         self._hotkey: HotkeyListener | None = None
         self._hotkey_error: str = ""  # Empty if registered OK; user-facing message otherwise.
@@ -129,7 +129,7 @@ class TrayApp:
         self._icon = pystray.Icon(
             "noidle",
             icon=_make_icon(_PAUSED_RGB),
-            title=self._tooltip(self.jiggler.state),
+            title=self._tooltip(self.engine.state),
             menu=self._build_menu(),
         )
 
@@ -138,7 +138,7 @@ class TrayApp:
     def _build_menu(self) -> Menu:
         return Menu(
             MenuItem(
-                lambda _i: "Pause" if self.jiggler.state.running else "Start",
+                lambda _i: "Pause" if self.engine.state.running else "Start",
                 self._toggle,
                 default=True,
             ),
@@ -155,10 +155,10 @@ class TrayApp:
                 # display-only indicator; switching presets is how you exit
                 # the custom value.
                 MenuItem(
-                    lambda _i: f"Custom ({_format_interval(self.jiggler.interval_seconds)})",
+                    lambda _i: f"Custom ({_format_interval(self.engine.interval_seconds)})",
                     None,
-                    checked=lambda _i: self.jiggler.interval_seconds not in _PRESET_SECONDS,
-                    visible=lambda _i: self.jiggler.interval_seconds not in _PRESET_SECONDS,
+                    checked=lambda _i: self.engine.interval_seconds not in _PRESET_SECONDS,
+                    visible=lambda _i: self.engine.interval_seconds not in _PRESET_SECONDS,
                     radio=True,
                     enabled=False,
                 ),
@@ -206,7 +206,7 @@ class TrayApp:
         def _set(_icon, _item) -> None:
             if self._quitting.is_set():
                 return
-            self.jiggler.set_interval(secs)
+            self.engine.set_interval(secs)
             self.config.interval_seconds = secs
             self._save()
             self._refresh()
@@ -214,14 +214,14 @@ class TrayApp:
 
     def _make_interval_checked(self, secs: float):
         def _checked(_item) -> bool:
-            return abs(self.jiggler.interval_seconds - secs) < 0.5
+            return abs(self.engine.interval_seconds - secs) < 0.5
         return _checked
 
     def _make_set_method(self, method: Method):
         def _set(_icon, _item) -> None:
             if self._quitting.is_set():
                 return
-            self.jiggler.set_method(method)
+            self.engine.set_method(method)
             self.config.method = method
             self._save()
             self._refresh()
@@ -229,7 +229,7 @@ class TrayApp:
 
     def _make_method_checked(self, method: Method):
         def _checked(_item) -> bool:
-            return self.jiggler.method == method
+            return self.engine.method == method
         return _checked
 
     # ---- toggles -------------------------------------------------------- #
@@ -237,11 +237,11 @@ class TrayApp:
     def _toggle(self, _icon, _item) -> None:
         if self._quitting.is_set():
             return
-        if self.jiggler.state.running:
-            self.jiggler.stop()
+        if self.engine.state.running:
+            self.engine.stop()
             self.stats.stopped()
         else:
-            self.jiggler.start()
+            self.engine.start()
             self.stats.started()
         self._refresh()
 
@@ -250,7 +250,7 @@ class TrayApp:
             return
         new = not self.config.smart_pause
         self.config.smart_pause = new
-        self.jiggler.set_smart_pause(new)
+        self.engine.set_smart_pause(new)
         self._save()
         self._refresh()
 
@@ -259,7 +259,7 @@ class TrayApp:
             return
         new = not self.config.pause_on_screen_share
         self.config.pause_on_screen_share = new
-        self.jiggler.set_pause_on_screen_share(new)
+        self.engine.set_pause_on_screen_share(new)
         self._save()
         self._refresh()
 
@@ -432,7 +432,7 @@ class TrayApp:
                     self._hotkey.stop()
                 except Exception:
                     log.exception("hotkey stop failed")
-            self.jiggler.stop()
+            self.engine.stop()
             self.stats.stopped()
         finally:
             try:
@@ -442,7 +442,7 @@ class TrayApp:
 
     def _shutdown_watchdog(self, deadline_seconds: float = 8.0) -> None:
         """If the process hasn't exited cleanly within `deadline_seconds`,
-        force os._exit. The threads we spawn (jiggler, hotkey, whats_new
+        force os._exit. The threads we spawn (engine, hotkey, whats_new
         worker, update worker) are all daemon=True, but daemon threads
         wedged on a syscall (Win32 PostThreadMessageW or a TCP read) won't
         actually let the process exit — Python waits for them.
@@ -453,7 +453,7 @@ class TrayApp:
 
     # ---- internals ------------------------------------------------------ #
 
-    def _on_state_change(self, _state: JigglerState) -> None:
+    def _on_state_change(self, _state: EngineState) -> None:
         if self._quitting.is_set():
             return
         self._refresh()
@@ -461,7 +461,7 @@ class TrayApp:
     def _refresh(self) -> None:
         if self._quitting.is_set():
             return
-        st = self.jiggler.state
+        st = self.engine.state
         try:
             self._icon.icon = _make_icon(_ACTIVE_RGB if st.running else _PAUSED_RGB)
             self._icon.title = self._tooltip(st)
@@ -484,14 +484,14 @@ class TrayApp:
         except Exception:
             log.debug("notify failed", exc_info=True)
 
-    def _tooltip(self, st: JigglerState) -> str:
+    def _tooltip(self, st: EngineState) -> str:
         status = "running" if st.running else "paused"
         hotkey_line = self.config.hotkey if not self._hotkey_error else f"{self.config.hotkey} (unavailable)"
         return (
             f"noidle.app — {status}\n"
-            f"method: {self.jiggler.method}  every {self.jiggler.interval_seconds:.0f}s\n"
+            f"method: {self.engine.method}  every {self.engine.interval_seconds:.0f}s\n"
             f"hotkey: {hotkey_line}\n"
-            f"last jiggle: {_format_last(st.last_jiggle_at)}"
+            f"last tick: {_format_last(st.last_tick_at)}"
         )
 
     # ---- public --------------------------------------------------------- #
@@ -577,10 +577,10 @@ def run_tray() -> None:
              CURRENT_VERSION, log_path, log_dir())
 
     cfg = load_config()
-    jiggler = Jiggler(
+    engine = Engine(
         interval_seconds=cfg.interval_seconds,
         method=cfg.method,  # type: ignore[arg-type]
         smart_pause=cfg.smart_pause,
         pause_on_screen_share=cfg.pause_on_screen_share,
     )
-    TrayApp(jiggler, cfg, log_path).run()
+    TrayApp(engine, cfg, log_path).run()

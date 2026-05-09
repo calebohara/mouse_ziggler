@@ -1,4 +1,4 @@
-"""Thread-safe runtime statistics for the jiggler loop."""
+"""Thread-safe runtime statistics for the engine loop."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class Stats:
         self.started_at: float | None = None
         self.last_idle_seconds: float | None = None
 
-    def record_jiggle(self, idle_seconds: float | None = None) -> None:
+    def record_tick(self, idle_seconds: float | None = None) -> None:
         with self._lock:
             self.tick_count += 1
             if idle_seconds is not None:
@@ -59,7 +59,7 @@ class Stats:
             )
             return (
                 f"Uptime: {uptime}\n"
-                f"Jiggles: {self.tick_count}\n"
+                f"Ticks: {self.tick_count}\n"
                 f"Skipped (active): {self.skipped_active}\n"
                 f"Skipped (screenshare): {self.skipped_screenshare}\n"
                 f"Last idle: {idle}"
@@ -80,12 +80,12 @@ class Stats:
 
 
 # INTEGRATION: instantiate one Stats() in JigglerTray.__init__ as
-#   self.stats = Stats(); self.stats.started(). Pass it into the jiggler
-#   worker (jiggler.py) so the tick loop calls stats.record_jiggle(idle)
+#   self.stats = Stats(); self.stats.started(). Pass it into the engine
+#   worker (engine.py) so the tick loop calls stats.record_tick(idle)
 #   on every successful injection and stats.record_skip("active") /
 #   stats.record_skip("screenshare") whenever the policy decides to skip.
 #   Add a "Show stats" menu item to the pystray Menu whose handler does
 #   icon.notify(self.stats.summary(), title="noidle"). On quit,
 #   call self.stats.stopped() before icon.stop() so a final summary read
 #   shows "Uptime: stopped". Stats is internally locked, so the tray
-#   thread, jiggler thread, and hotkey thread can all touch it safely.
+#   thread, engine thread, and hotkey thread can all touch it safely.

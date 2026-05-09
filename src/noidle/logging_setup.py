@@ -9,7 +9,7 @@ from pathlib import Path
 _LOG_FORMAT = "%(asctime)s %(name)-20s %(levelname)-7s %(message)s"
 _MAX_BYTES = 1024 * 1024
 _BACKUP_COUNT = 3
-_HANDLER_ATTR = "_zig_file_handler"
+_HANDLER_ATTR = "_noidle_file_handler"
 
 
 def log_dir() -> Path:
@@ -21,7 +21,7 @@ def log_dir() -> Path:
 
 
 def _log_path() -> Path:
-    return log_dir() / "zig.log"
+    return log_dir() / "noidle.log"
 
 
 def setup_file_logging(level: int = logging.INFO) -> Path:

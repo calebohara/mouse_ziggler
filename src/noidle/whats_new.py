@@ -18,7 +18,7 @@ import webbrowser
 from dataclasses import dataclass
 from typing import Literal
 
-log = logging.getLogger("zig.whats_new")
+log = logging.getLogger("noidle.whats_new")
 
 Choice = Literal["download", "later", "skip"]
 

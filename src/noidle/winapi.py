@@ -1,6 +1,6 @@
 """
-noidle (zig.winapi)
-====================
+noidle (noidle.winapi)
+======================
 
 Thin ctypes wrapper around the Win32 surface required to keep a Windows
 machine considered "active" by the OS power subsystem AND by user-mode
@@ -49,7 +49,7 @@ _IS_WINDOWS = sys.platform.startswith("win")
 def _require_windows() -> None:
     if not _IS_WINDOWS:
         raise RuntimeError(
-            "noidle (zig.winapi) only operates on Windows; "
+            "noidle (noidle.winapi) only operates on Windows; "
             f"current platform is {sys.platform!r}"
         )
 
@@ -340,7 +340,7 @@ def get_idle_seconds() -> float:
 
 
 # --------------------------------------------------------------------------- #
-# Smoke test (manual): `python -m zig.winapi`
+# Smoke test (manual): `python -m noidle.winapi`
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":  # pragma: no cover
@@ -351,10 +351,10 @@ if __name__ == "__main__":  # pragma: no cover
     print(f"sizeof(INPUT)        = {ctypes.sizeof(_INPUT)} bytes")
     print(f"sizeof(LASTINPUTINFO)= {ctypes.sizeof(_LASTINPUTINFO)} bytes")
 
-    print(f"idle before jiggle   = {get_idle_seconds():.3f} s")
+    print(f"idle before tick     = {get_idle_seconds():.3f} s")
     prevent_sleep()
     send_mouse_jitter()
     send_f15()
     time.sleep(0.05)
-    print(f"idle after jiggle    = {get_idle_seconds():.3f} s  (expect < 0.1)")
+    print(f"idle after tick      = {get_idle_seconds():.3f} s  (expect < 0.1)")
     allow_sleep()

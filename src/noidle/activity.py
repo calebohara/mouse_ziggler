@@ -2,7 +2,7 @@
 noidle.activity
 ===============
 
-Activity-aware policy helpers used by the jiggler engine to decide whether a
+Activity-aware policy helpers used by the noidle engine to decide whether a
 scheduled tick should be skipped:
 
   1. Smart-pause: skip injection when the user has produced real input within
@@ -12,8 +12,8 @@ scheduled tick should be skipped:
      twitch in the middle of a presentation is unprofessional.
 
 This module is import-safe on non-Windows platforms. Detection functions
-return False on any error so the jiggler degrades to "always jiggle" rather
-than "never jiggle" — failing open keeps the core feature working.
+return False on any error so the engine degrades to "always tick" rather
+than "never tick" — failing open keeps the core feature working.
 
 No pywin32. Direct ctypes only, mirroring the style of `winapi.py`.
 """
@@ -32,7 +32,7 @@ __all__ = [
     "is_teams_screen_sharing",
 ]
 
-log = logging.getLogger("zig.activity")
+log = logging.getLogger("noidle.activity")
 
 _IS_WINDOWS = sys.platform.startswith("win")
 
@@ -45,20 +45,20 @@ _IS_WINDOWS = sys.platform.startswith("win")
 def should_skip_for_user_activity(min_idle_seconds: float = 5.0) -> bool:
     """
     Return True if the user has produced real input within the last
-    `min_idle_seconds` seconds — meaning we don't need to jiggle this tick
+    `min_idle_seconds` seconds — meaning we don't need to tick this cycle
     because Windows' idle counter (and therefore Teams/Slack presence) has
     already been reset by genuine activity.
 
-    Threshold rationale (default ~5s, NOT close to the jiggle interval):
-      Skipping a single jiggle is harmless. If the user goes idle the instant
-      after we skip, the next scheduled jiggle is at most `interval_seconds`
+    Threshold rationale (default ~5s, NOT close to the tick interval):
+      Skipping a single tick is harmless. If the user goes idle the instant
+      after we skip, the next scheduled tick is at most `interval_seconds`
       away — well under Teams' 5-minute Away threshold for any sane interval
       (we cap at 1s minimum and default to 45s). Using a tight 5s window means
       we only suppress redundant injections during obviously-active typing
       bursts and never risk missing the presence window.
 
-    Returns False (i.e. "do not skip, jiggle normally") if `get_idle_seconds`
-    raises — fail open so the jiggler keeps running through transient Win32
+    Returns False (i.e. "do not skip, tick normally") if `get_idle_seconds`
+    raises — fail open so the engine keeps running through transient Win32
     weirdness (RDP reconnects, session-switch races, etc.).
     """
     try:
@@ -182,10 +182,10 @@ def is_teams_screen_sharing() -> bool:
 
 
 # INTEGRATION:
-# In src/zig/jiggler.py, add at the top with the other relative imports:
+# In src/noidle/engine.py, add at the top with the other relative imports:
 #     from .activity import should_skip_for_user_activity, is_teams_screen_sharing
 #
-# Then in Jiggler._do_jiggle, as the very first thing inside the method
+# Then in Engine._do_tick, as the very first thing inside the method
 # (before the `with self._lock:` that reads `method`), add:
 #     if should_skip_for_user_activity() or is_teams_screen_sharing():
 #         with self._lock:

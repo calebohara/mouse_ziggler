@@ -1,11 +1,11 @@
-"""Tests for zig.updater pure-Python helpers.
+"""Tests for noidle.updater pure-Python helpers.
 
 All functions tested here are platform-independent — no Win32 calls, no
 network. Safe to run on Linux/macOS CI runners.
 """
 import time
 
-from zig.updater import (
+from noidle.updater import (
     _is_newer,
     _is_safe_release_url,
     _parse_tuple,

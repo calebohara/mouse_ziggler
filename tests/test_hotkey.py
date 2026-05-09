@@ -1,7 +1,7 @@
-"""Tests for zig.hotkey.parse_hotkey — pure Python, no Win32."""
+"""Tests for noidle.hotkey.parse_hotkey — pure Python, no Win32."""
 import pytest
 
-from zig.hotkey import MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, parse_hotkey
+from noidle.hotkey import MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, parse_hotkey
 
 
 class TestParseHotkey:

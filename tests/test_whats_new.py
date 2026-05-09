@@ -1,5 +1,5 @@
-"""Tests for zig.whats_new.parse_release_notes — pure Python, no GUI."""
-from zig.whats_new import parse_release_notes
+"""Tests for noidle.whats_new.parse_release_notes — pure Python, no GUI."""
+from noidle.whats_new import parse_release_notes
 
 
 STANDARD_BODY = (

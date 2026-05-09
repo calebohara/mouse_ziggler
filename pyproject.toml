@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.scripts]
-noidle = "zig.__main__:main"
+noidle = "noidle.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/calebohara/noidle.app"
@@ -39,4 +39,4 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["zig*"]
+include = ["noidle*"]

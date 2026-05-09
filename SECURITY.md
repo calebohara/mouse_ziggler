@@ -81,7 +81,7 @@ primitive targeting any path they could redirect to.
 
 **Fixed:** Added `path.is_symlink()` guard immediately after `mkdir` in
 two locations:
-- `src/zig/logging_setup.py` — raises `RuntimeError` before
+- `src/noidle/logging_setup.py` — raises `RuntimeError` before
   `RotatingFileHandler` opens the log file
 - `noidle.py` `_crash_log_path()` — raises `RuntimeError` before the
   crash log is written
@@ -122,8 +122,8 @@ from the GitHub API and verifying the type is `commit` (not a tag object).
 The following bugs were found during a fresh agent-team review and fixed
 on main, pending the next release:
 
-- **`jiggler.start()` state corruption** — `_state.running = True` was set
-  before `prevent_sleep()`, so a `WinError` left the jiggler stuck in a
+- **`engine.start()` state corruption** — `_state.running = True` was set
+  before `prevent_sleep()`, so a `WinError` left the engine stuck in a
   "running" state with no thread behind it. Fixed: flag now set after the
   Win32 call succeeds.
 - **`HotkeyListener` registration timeout race** — `start()` silently
@@ -137,7 +137,7 @@ on main, pending the next release:
 - **Smoke test `assert` stripped by `python -O`** — all bare `assert`
   statements in `_smoke()` converted to explicit `if/raise AssertionError`
   so the check survives optimization mode.
-- **Version consistency check** — `_smoke()` now compares `zig.__version__`
+- **Version consistency check** — `_smoke()` now compares `noidle.__version__`
   against `pyproject.toml` via `tomllib` (gated on file presence, so it
   runs from source and is skipped in PyInstaller bundles).
 

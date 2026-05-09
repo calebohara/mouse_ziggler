@@ -18,7 +18,7 @@ from .winapi import (
 
 from .stats import Stats
 
-log = logging.getLogger("zig.jiggler")
+log = logging.getLogger("noidle.engine")
 
 Method = Literal["mouse", "key", "both"]
 
@@ -27,33 +27,33 @@ _MIN_INTERVAL_S = 1.0
 
 
 @dataclass
-class JigglerState:
+class EngineState:
     running: bool = False
-    last_jiggle_at: Optional[float] = None
+    last_tick_at: Optional[float] = None
     last_idle_seconds: Optional[float] = None
     tick_count: int = 0
 
 
 @dataclass
-class Jiggler:
+class Engine:
     interval_seconds: float = 45.0
     method: Method = "both"
     smart_pause: bool = True
     pause_on_screen_share: bool = True
-    on_state_change: Optional[Callable[[JigglerState], None]] = None
+    on_state_change: Optional[Callable[[EngineState], None]] = None
     stats: Optional[Stats] = None
 
     _stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
-    _state: JigglerState = field(default_factory=JigglerState, init=False, repr=False)
+    _state: EngineState = field(default_factory=EngineState, init=False, repr=False)
 
     @property
-    def state(self) -> JigglerState:
+    def state(self) -> EngineState:
         with self._lock:
-            return JigglerState(
+            return EngineState(
                 running=self._state.running,
-                last_jiggle_at=self._state.last_jiggle_at,
+                last_tick_at=self._state.last_tick_at,
                 last_idle_seconds=self._state.last_idle_seconds,
                 tick_count=self._state.tick_count,
             )
@@ -86,11 +86,11 @@ class Jiggler:
             prevent_sleep()
             self._state.running = True
             self._thread = threading.Thread(
-                target=self._run, name="zig-jiggler", daemon=True
+                target=self._run, name="noidle-engine", daemon=True
             )
             self._thread.start()
         self._notify()
-        log.info("jiggler started method=%s interval=%.1fs", self.method, self.interval_seconds)
+        log.info("engine started method=%s interval=%.1fs", self.method, self.interval_seconds)
 
     def stop(self) -> None:
         with self._lock:
@@ -106,7 +106,7 @@ class Jiggler:
             allow_sleep()
         finally:
             self._notify()
-            log.info("jiggler stopped")
+            log.info("engine stopped")
 
     def _next_delay(self) -> float:
         with self._lock:
@@ -115,7 +115,7 @@ class Jiggler:
         delay = base + random.uniform(-spread, spread)
         return max(_MIN_INTERVAL_S, delay)
 
-    def _do_jiggle(self) -> None:
+    def _do_tick(self) -> None:
         with self._lock:
             method = self.method
             smart = self.smart_pause
@@ -159,29 +159,29 @@ class Jiggler:
             log.exception("get_idle_seconds failed")
 
         with self._lock:
-            self._state.last_jiggle_at = time.time()
+            self._state.last_tick_at = time.time()
             self._state.last_idle_seconds = idle
             self._state.tick_count += 1
 
         if self.stats is not None:
-            self.stats.record_jiggle(idle)
+            self.stats.record_tick(idle)
 
         if idle is not None and idle > 2.0:
-            log.warning("post-jiggle idle=%.2fs (expected ~0)", idle)
+            log.warning("post-tick idle=%.2fs (expected ~0)", idle)
         else:
-            log.debug("jiggle ok idle=%s", idle)
+            log.debug("tick ok idle=%s", idle)
 
         self._notify()
 
     def _run(self) -> None:
         try:
-            self._do_jiggle()
+            self._do_tick()
             while not self._stop.is_set():
                 if self._stop.wait(self._next_delay()):
                     break
-                self._do_jiggle()
+                self._do_tick()
         except Exception:
-            log.exception("jiggler loop crashed")
+            log.exception("engine loop crashed")
         finally:
             with self._lock:
                 self._state.running = False
