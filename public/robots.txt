@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://noidle.app/sitemap.xml

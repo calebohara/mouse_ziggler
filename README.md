@@ -27,13 +27,25 @@ Want to verify the binary you just downloaded? Every release ships a `SHA256SUMS
 <!-- LATEST_RELEASE_START -->
 <!-- This block is auto-updated by .github/workflows/update-readme.yml on every release. -->
 
-### Latest release: [`v0.3.3`](https://github.com/calebohara/noidle.app/releases/tag/v0.3.3) — v0.3.3
-Published: `2026-05-04T14:19:39Z`
+### Latest release: [`v0.3.7`](https://github.com/calebohara/noidle.app/releases/tag/v0.3.7) — v0.3.7
+Published: `2026-05-04T16:53:04Z`
 
 <details>
 <summary>Release notes</summary>
 
-**Full Changelog**: https://github.com/calebohara/noidle.app/compare/v0.3.0...v0.3.3
+Two-part release. v0.3.6 closed the 3 deferred audit CRITs but shipped an empty SHA256SUMS.txt (PowerShell -Include gotcha); v0.3.7 fixes that. Use v0.3.7 — v0.3.6 has been superseded for the verification artifacts.
+
+### Added
+* SHA256SUMS.txt published with every release for tamper-evidence — verifiable with `Get-FileHash` (PowerShell) or `sha256sum` (Linux/macOS)
+* cosign keyless signatures (`.sig` + `.pem`) for `noidle.exe`, `noidle.msi`, and `SHA256SUMS.txt` — generated via GitHub OIDC and logged to the Sigstore Rekor transparency log
+* `SIGNING.md` with verification commands and SignPath OSS Foundation application steps
+* Install-mode-aware autostart fully closes CRIT-B — MSI and portable `.exe` now use distinct registry values (`noidle.app` / `noidle.app-portable` / `noidle.app-dev`)
+
+### Fixed
+* Hotkey-registration-failure at startup now opens a Tk dialog instead of a tray balloon (Focus Assist can't swallow it)
+* SHA256SUMS.txt was empty in v0.3.6 — PowerShell `Get-ChildItem -Include` gotcha; now enumerates explicitly
+
+**Full Changelog**: https://github.com/calebohara/noidle.app/compare/v0.3.5...v0.3.7
 
 </details>
 
@@ -80,6 +92,17 @@ python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 python noidle.py
 ```
+
+### Run the test suite
+
+The `tests/` directory contains platform-independent pytest tests that run on Linux, macOS, and Windows (no Win32 calls — safe for CI runners):
+
+```bash
+pip install pytest
+pytest tests/ -v
+```
+
+Covers: version comparison, URL safety, rate limiting, config coercion + round-trips, hotkey parsing, release-note parsing, and jiggler API validation.
 
 ### Confirming it's working
 ```powershell
@@ -136,12 +159,23 @@ src/zig/
 ├── config.py        # atomic JSON persistence (%APPDATA%\noidle\config.json), thread-safe
 ├── autostart.py     # HKCU\Run toggle, install-mode aware (MSI vs portable distinct values)
 ├── activity.py      # smart-pause + Teams screen-share detection (cached WinDLL binding)
-├── logging_setup.py # rotating log file in %LOCALAPPDATA%\noidle\
+├── logging_setup.py # rotating log file in %LOCALAPPDATA%\noidle\ (symlink-safe)
 ├── updater.py       # GitHub Releases poll, URL whitelist, 6h/24h rate limit
 ├── hotkey.py        # global hotkey (Win32 RegisterHotKey), per-instance ID, F1–F24 supported
 ├── stats.py         # uptime + tick counters, thread-safe
 └── whats_new.py     # tk subprocess dialog for updates + critical alerts (HiDPI-aware)
 noidle.py            # entry point — `python noidle.py` or PyInstaller bundle, single-instance mutex
+tests/
+├── conftest.py          # adds src/ to sys.path
+├── test_config.py       # coercion rules, load/save round-trips, corrupt JSON fallback
+├── test_hotkey.py       # parse_hotkey: valid combos, F-key range, error paths
+├── test_jiggler.py      # Jiggler API surface, set_interval/set_method validation
+├── test_updater.py      # version comparison, URL safety, rate limiting, is_offerable
+└── test_whats_new.py    # parse_release_notes: categories, trailer stripping, attribution removal
+public/
+├── index.html       # landing page — single-file, no build step
+├── og.svg           # Open Graph social preview image (1200×630)
+└── robots.txt       # crawler directives
 ```
 
 Deep dives:
@@ -173,17 +207,18 @@ Output: `dist/noidle.exe`.
 
 ## Security & known issues
 
-The codebase has been through a deep audit — 5 specialist reviewers, 119 findings across concurrency, security, Win32, packaging, and UX. As of v0.3.7, **41 critical/high audit findings have been resolved** across v0.3.4–v0.3.7:
+The codebase has been through a deep audit — 5 specialist reviewers, 119 findings across concurrency, security, Win32, packaging, and UX. As of v0.3.7 + post-release fixes, **43 critical/high audit findings have been resolved** across v0.3.4–v0.3.7:
 
 - **v0.3.4 (11 fixes)**: tkinter-on-thread crash → subprocess; shell injection in update-readme.yml; URL scheme whitelist; rate-limited update checks; "Skip this version" floor semantics; hotkey-failure visibility; smoke gate for empty release notes.
 - **v0.3.5 (15 fixes)**: GetTickCount64 (no 49.7d wraparound); F1–F24 hotkey support; single-instance mutex; atexit cleanup so Ctrl+C doesn't pin the system awake; HiDPI-aware dialogs; bounded shutdown watchdog; install-mode-aware skipped_version floor.
 - **v0.3.6 + v0.3.7 (15 fixes)**: install-mode-aware autostart (MSI vs portable distinct registry values, no more collisions); cosign keyless signing for every release artifact via GitHub OIDC; SHA256SUMS.txt for tamper-evidence; startup-critical alerts use Tk dialog instead of Focus-Assist-swallowed tray balloons.
+- **v0.3.8 (2 security fixes + reliability)**: HIGH-1 symlink/junction guard on log directory writes (`logging_setup.py`, `noidle.py`); HIGH-2 all GitHub Actions SHA-pinned to commit SHAs across all three workflow files.
+
+Additional reliability fixes on main (not audit items): `jiggler.start()` state corruption on `prevent_sleep()` failure; `HotkeyListener` registration timeout race; `packaging` library added to dependencies (fixes pre-release version comparison in updater fallback path); smoke test `assert` statements hardened against `python -O`; version consistency check added.
 
 Remaining open items are tracked in [SECURITY.md](SECURITY.md):
 - **CRIT-A** — Authenticode code signing (still open; cosign + SHA256 are shipped, but SmartScreen needs Authenticode). [SignPath.io OSS](https://signpath.io/foundation) application is the path forward.
 - **CRIT-C** — Focus Assist swallows informational tray balloons (low impact; the *important* alerts now use Tk dialogs).
-- **HIGH-1** — Symlink/junction guard on log directory writes.
-- **HIGH-2** — Action SHA pinning (cosign-installer is partially pinned; others still on major-version tags).
 
 ## License
 

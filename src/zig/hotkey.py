@@ -140,6 +140,9 @@ class HotkeyListener:
         self._thread = threading.Thread(target=self._run, name="HotkeyListener", daemon=True)
         self._thread.start()
         self._ready.wait(timeout=5.0)
+        if not self._ready.is_set():
+            self._thread = None
+            raise TimeoutError("HotkeyListener: registration timed out after 5 s")
         if self._error is not None:
             # The thread has already exited via the early-return path; clean
             # up state so a subsequent stop() is a safe no-op.

@@ -83,8 +83,8 @@ class Jiggler:
             if self._state.running:
                 return
             self._stop.clear()
-            self._state.running = True
             prevent_sleep()
+            self._state.running = True
             self._thread = threading.Thread(
                 target=self._run, name="zig-jiggler", daemon=True
             )

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0a0a0f"/>
+  <defs>
+    <radialGradient id="g" cx="80%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#0a0a0f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#g)"/>
+  <circle cx="960" cy="250" r="110" fill="#22c55e"/>
+  <text x="110" y="280" font-family="Inter,sans-serif" font-size="130" font-weight="800" fill="#ffffff">stay green.</text>
+  <text x="114" y="370" font-family="Inter,sans-serif" font-size="34" fill="#a3a3aa">noidle.app — a friendly Windows tray app</text>
+  <text x="114" y="560" font-family="JetBrains Mono,monospace" font-size="22" fill="#71717a">$ noidle.exe&#160;&#160;//&#160;mit&#160;//&#160;no telemetry</text>
+</svg>

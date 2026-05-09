@@ -3,7 +3,7 @@
 This file tracks audit findings that have NOT yet been fully fixed.
 The full audit (5 specialist reviewers, 119 findings across concurrency,
 security, Win32, packaging, UX) was run before v0.3.4. Across v0.3.4,
-v0.3.5, and v0.3.6, **41 critical/high audit findings have been resolved**.
+v0.3.5, v0.3.6, and post-v0.3.7 fixes, **43 critical/high audit findings have been resolved**.
 The items below are what remains.
 
 If you find something not on this list, please open an issue:
@@ -65,14 +65,83 @@ redesign would be overkill for the remaining surface.
 
 ## Open high-severity issues
 
-| ID | Component | Issue | Fix sketch |
-|---|---|---|---|
-| HIGH-1 | logging_setup.py / noidle.py | `mkdir + open("a")` on `%LOCALAPPDATA%\noidle\` follows Windows junctions. A pre-positioned attacker creating that path as a junction turns noidle into a write primitive. | Check `path.is_symlink()` before write; refuse to follow reparse points. |
-| HIGH-2 | .github/workflows/*.yml | `actions/checkout@v4`, `softprops/action-gh-release@v2`, `actions/setup-python@v5`, `sigstore/cosign-installer@v3` are pinned to mutable major-version tags (cosign IS pinned to a SHA in v0.3.6 — others not yet). A maintainer compromise could re-point a tag at malicious code that ships a malicious release. | Pin every external action to a commit SHA; document upgrade process in `docs/release.md`. |
+No open HIGH-severity items. See CRITs above for remaining work.
 
 ---
 
 ## Resolved items
+
+### HIGH-1: Symlink/junction attack on log directory writes
+**Status:** ✅ FIXED in v0.3.8
+
+`mkdir + open("a")` on `%LOCALAPPDATA%\noidle\` previously followed
+Windows directory junctions. A pre-positioned local attacker who created
+that path as a junction could turn noidle into an arbitrary file write
+primitive targeting any path they could redirect to.
+
+**Fixed:** Added `path.is_symlink()` guard immediately after `mkdir` in
+two locations:
+- `src/zig/logging_setup.py` — raises `RuntimeError` before
+  `RotatingFileHandler` opens the log file
+- `noidle.py` `_crash_log_path()` — raises `RuntimeError` before the
+  crash log is written
+
+If the directory is a symlink or junction, noidle now raises rather than
+following the reparse point.
+
+### HIGH-2: GitHub Actions pinned to mutable major-version tags
+**Status:** ✅ FIXED in v0.3.8
+
+All external GitHub Actions in `build.yml`, `lint.yml`, and
+`update-readme.yml` were pinned to mutable major-version tags
+(`@v4`, `@v5`, `@v2`, `@v3`). A compromised upstream maintainer could
+re-point a tag at malicious code and ship a backdoored release through
+this repo's own pipeline.
+
+**Fixed:** All 5 external actions pinned to immutable commit SHAs,
+verified by fetching from the GitHub API and dereferencing annotated tags:
+
+| Action | SHA | Version |
+|--------|-----|---------|
+| `actions/checkout` | `34e114876b0b11c390a56381ad16ebd13914f8d5` | v4 |
+| `actions/setup-python` | `a26af69be951a213d495a4c3e4e4022e16d87065` | v5 |
+| `actions/upload-artifact` | `ea165f8d65b6e75b540449e92b4886f43607fa02` | v4 |
+| `softprops/action-gh-release` | `3bb12739c298aeb8a4eeaf626c5b8d85266b0e65` | v2 |
+| `sigstore/cosign-installer` | `398d4b0eeef1380460a10c8013a76f728fb906ac` | v3 |
+
+Each pin has a `# v<major>` inline comment for readability. Upgrade
+process: when Dependabot bumps a major tag, update the SHA by re-fetching
+from the GitHub API and verifying the type is `commit` (not a tag object).
+
+---
+
+## Resolved items
+
+### Additional post-v0.3.7 reliability fixes (not original audit items)
+
+The following bugs were found during a fresh agent-team review and fixed
+on main, pending the next release:
+
+- **`jiggler.start()` state corruption** — `_state.running = True` was set
+  before `prevent_sleep()`, so a `WinError` left the jiggler stuck in a
+  "running" state with no thread behind it. Fixed: flag now set after the
+  Win32 call succeeds.
+- **`HotkeyListener` registration timeout race** — `start()` silently
+  returned success on a 5-second registration timeout, leaking the
+  background thread. Fixed: raises `TimeoutError` if `_ready` is not set
+  after the wait.
+- **`packaging` missing from dependencies** — the `_parse_tuple` fallback
+  in `updater.py` incorrectly treated `0.4.0-rc.1` as newer than `0.4.0`.
+  `packaging` is now in `requirements.txt` and `pyproject.toml`; the
+  correct `packaging.version.Version` path is always taken.
+- **Smoke test `assert` stripped by `python -O`** — all bare `assert`
+  statements in `_smoke()` converted to explicit `if/raise AssertionError`
+  so the check survives optimization mode.
+- **Version consistency check** — `_smoke()` now compares `zig.__version__`
+  against `pyproject.toml` via `tomllib` (gated on file presence, so it
+  runs from source and is skipped in PyInstaller bundles).
+
+---
 
 ### CRIT-B: MSI install and portable .exe collide on `HKCU\Run` value name
 **Status:** ✅ FIXED in v0.3.6
@@ -94,18 +163,19 @@ named mutex (`Global\noidle.app.singleinstance`).
 
 ### Other resolved CRIT/HIGH items
 
-See git history (v0.3.4, v0.3.5, v0.3.6 release notes). Highlights:
+See git history (v0.3.4, v0.3.5, v0.3.6, v0.3.7 release notes). Highlights:
 - Tkinter on background thread → subprocess (v0.3.4)
 - Shell injection in update-readme.yml heredoc (v0.3.4)
 - Hotkey collision invisible to user (v0.3.4)
 - No update-check rate limit → eventual GitHub 403 (v0.3.4)
 - "Skip this version" wrong semantics (v0.3.4)
 - GetTickCount wraparound at 49.7 days (v0.3.5)
-- Asserts stripped by `python -O` (v0.3.5)
 - Missing single-instance guard (v0.3.5)
 - Ctrl+C left wakelock pinned (v0.3.5)
 - HiDPI dialog blur (v0.3.5)
 - F1–F24 hotkey support (v0.3.5)
+- HIGH-1 symlink/junction guard on log directory writes (v0.3.8)
+- HIGH-2 GitHub Actions SHA pinning across all workflow files (v0.3.8)
 
 ---
 

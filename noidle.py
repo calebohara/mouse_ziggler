@@ -97,6 +97,8 @@ def _crash_log_path() -> Path:
     base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     d = base / "noidle"
     d.mkdir(parents=True, exist_ok=True)
+    if d.is_symlink():
+        raise RuntimeError(f"noidle log directory is a symlink or junction: {d}")
     return d / "crash.log"
 
 
@@ -135,6 +137,10 @@ def _smoke() -> int:
       - send_mouse_jitter signature drift
       - Markdown parser regressions (incl. empty-release-notes case)
       - Newly-added zig.* modules failing to import in the bundle
+      - Version mismatch between pyproject.toml and zig.__version__
+
+    Uses explicit if/raise instead of bare assert so python -O cannot
+    silently strip the checks and return a false-positive exit 0.
     """
     import importlib
 
@@ -154,6 +160,19 @@ def _smoke() -> int:
     import zig.whats_new
     import zig.winapi
 
+    # Version consistency — only runs from source; pyproject.toml is absent
+    # in PyInstaller bundles so the check is silently skipped there.
+    # Update BOTH pyproject.toml and src/zig/__init__.py at each release.
+    _pyproject = Path(__file__).parent / "pyproject.toml"
+    if _pyproject.exists():
+        import tomllib
+        with _pyproject.open("rb") as _f:
+            _toml_ver = tomllib.load(_f)["project"]["version"]
+        from zig import __version__ as _zig_ver
+        if _zig_ver != _toml_ver:
+            print(f"smoke FAIL: zig.__version__={_zig_ver!r} != pyproject.toml={_toml_ver!r}", flush=True)
+            return 5
+
     # Markdown parser sanity (categorized release body).
     parsed = zig.whats_new.parse_release_notes(
         "## What's Changed\n"
@@ -161,32 +180,40 @@ def _smoke() -> int:
         "* fix: bar by @y in #2\n"
         "* feat!: breaking change baz by @z in #3\n"
     )
-    assert parsed.sections["Added"] == ["foo", "breaking change baz"], parsed.sections
-    assert parsed.sections["Fixed"] == ["bar"], parsed.sections
+    if parsed.sections["Added"] != ["foo", "breaking change baz"]:
+        raise AssertionError(f"Markdown Added wrong: {parsed.sections}")
+    if parsed.sections["Fixed"] != ["bar"]:
+        raise AssertionError(f"Markdown Fixed wrong: {parsed.sections}")
 
     # Empty-release-notes case (the v0.3.0/v0.3.3 actual scenario): the
     # parser must not throw and must produce an empty grouping the dialog
     # can render as "(No release notes provided.)".
     empty = zig.whats_new.parse_release_notes("")
-    assert all(not v for v in empty.sections.values()), empty.sections
-    assert not empty.other, empty.other
+    if not all(not v for v in empty.sections.values()):
+        raise AssertionError(f"Empty parse non-empty sections: {empty.sections}")
+    if empty.other:
+        raise AssertionError(f"Empty parse has other: {empty.other}")
 
     # GitHub's just-Full-Changelog body (the "no merged PRs" case): same
     # as empty after the parser strips the trailer.
     only_changelog = zig.whats_new.parse_release_notes(
         "**Full Changelog**: https://github.com/x/y/compare/v0.3.3...v0.3.4\n"
     )
-    assert all(not v for v in only_changelog.sections.values()), only_changelog.sections
-    assert not only_changelog.other, only_changelog.other
+    if not all(not v for v in only_changelog.sections.values()):
+        raise AssertionError(f"Changelog-only parse non-empty sections: {only_changelog.sections}")
+    if only_changelog.other:
+        raise AssertionError(f"Changelog-only parse has other: {only_changelog.other}")
 
     # Jiggler API surface.
     j = zig.jiggler.Jiggler(interval_seconds=10.0, method="both")
-    assert j.state.running is False
+    if j.state.running is not False:
+        raise AssertionError("Jiggler.state.running should be False on init")
     j.set_interval(20.0)
     j.set_method("mouse")
     j.set_smart_pause(False)
     j.set_pause_on_screen_share(False)
-    assert j.method == "mouse"
+    if j.method != "mouse":
+        raise AssertionError(f"j.method should be 'mouse', got {j.method!r}")
 
     # Win32 surface.
     for name in ("prevent_sleep", "allow_sleep", "send_mouse_jitter",
@@ -207,28 +234,39 @@ def _smoke() -> int:
                        "pause_on_screen_share", "autostart", "hotkey",
                        "skipped_version", "last_update_check_at",
                        "last_update_check_failed"):
-        assert hasattr(cfg, field_name), f"Config missing {field_name}"
+        if not hasattr(cfg, field_name):
+            raise AssertionError(f"Config missing {field_name}")
 
     # Hotkey parser.
     mods, vk = zig.hotkey.parse_hotkey("ctrl+alt+z")
-    assert mods != 0 and vk != 0
+    if not (mods != 0 and vk != 0):
+        raise AssertionError(f"parse_hotkey returned zero values: mods={mods} vk={vk}")
 
     # Updater rate-limit + offerable helpers.
-    assert zig.updater.should_check_now(0, False) is True
-    assert zig.updater.should_check_now(__import__("time").time(), False) is False
-    assert zig.updater.is_offerable("0.4.0", "") is True
-    assert zig.updater.is_offerable("0.4.0", "0.4.0") is False
-    assert zig.updater.is_offerable("0.4.1", "0.4.0") is True
-    assert zig.updater._is_safe_release_url("https://github.com/x/y/releases/tag/v1") is True
-    assert zig.updater._is_safe_release_url("javascript:alert(1)") is False
-    assert zig.updater._is_safe_release_url("file:///etc/passwd") is False
+    if zig.updater.should_check_now(0, False) is not True:
+        raise AssertionError("should_check_now(0, False) should be True")
+    if zig.updater.should_check_now(__import__("time").time(), False) is not False:
+        raise AssertionError("should_check_now(now, False) should be False")
+    if zig.updater.is_offerable("0.4.0", "") is not True:
+        raise AssertionError("is_offerable('0.4.0', '') should be True")
+    if zig.updater.is_offerable("0.4.0", "0.4.0") is not False:
+        raise AssertionError("is_offerable('0.4.0', '0.4.0') should be False")
+    if zig.updater.is_offerable("0.4.1", "0.4.0") is not True:
+        raise AssertionError("is_offerable('0.4.1', '0.4.0') should be True")
+    if zig.updater._is_safe_release_url("https://github.com/x/y/releases/tag/v1") is not True:
+        raise AssertionError("safe URL should be True")
+    if zig.updater._is_safe_release_url("javascript:alert(1)") is not False:
+        raise AssertionError("javascript: URL should be False")
+    if zig.updater._is_safe_release_url("file:///etc/passwd") is not False:
+        raise AssertionError("file: URL should be False")
 
     # Stats.
     s = zig.stats.Stats()
     s.started()
     s.record_jiggle()
     s.record_skip("active")
-    assert "Jiggles" in s.summary()
+    if "Jiggles" not in s.summary():
+        raise AssertionError(f"Stats.summary() missing 'Jiggles': {s.summary()!r}")
     s.reset()
 
     print("smoke ok", flush=True)

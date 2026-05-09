@@ -14,8 +14,10 @@
   <meta property="og:description" content="Keep your Microsoft Teams presence green without parking your laptop on a fake screensaver. Tiny, free, MIT, no telemetry.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://noidle.app">
-  <meta property="og:image" content="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 630'%3E%3Crect width='1200' height='630' fill='%230a0a0f'/%3E%3Cdefs%3E%3CradialGradient id='g' cx='80%25' cy='40%25' r='55%25'%3E%3Cstop offset='0%25' stop-color='%2322c55e' stop-opacity='0.35'/%3E%3Cstop offset='100%25' stop-color='%230a0a0f' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='630' fill='url(%23g)'/%3E%3Ccircle cx='960' cy='250' r='110' fill='%2322c55e'/%3E%3Ctext x='110' y='280' font-family='Inter,sans-serif' font-size='130' font-weight='800' fill='%23ffffff'%3Estay green.%3C/text%3E%3Ctext x='114' y='370' font-family='Inter,sans-serif' font-size='34' fill='%23a3a3aa'%3EnoidIe.app — a friendly Windows tray app%3C/text%3E%3Ctext x='114' y='560' font-family='JetBrains Mono,monospace' font-size='22' fill='%2371717a'%3E$ noidIe.exe&#160;&#160;//&#160;mit&#160;//&#160;no telemetry%3C/text%3E%3C/svg%3E">
+  <meta property="og:image" content="https://noidle.app/og.svg">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://noidle.app/og.svg">
+  <link rel="canonical" href="https://noidle.app">
 
   <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
   <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800,900&family=jetbrains-mono:400,500&display=swap" rel="stylesheet">
@@ -31,7 +33,7 @@
       --ink: #f5f5f7;
       --ink-2: #c4c4cc;
       --ink-3: #8e8e96;
-      --ink-4: #65656e;
+      --ink-4: #80808a;
       --green: #22c55e;
       --green-2: #15803d;
       --green-glow: rgba(34, 197, 94, 0.45);
@@ -823,7 +825,7 @@
           <span class="arrow">↓</span> right-click the green dot in the taskbar to see the real menu
         </div>
 
-        <div class="desktop reveal">
+        <div class="desktop reveal" aria-hidden="true">
           <div class="desktop-canvas">
             <div class="desktop-callout">
               your Microsoft Teams presence stays
@@ -868,7 +870,7 @@
             </div>
             <div class="tray-clock">
               <div class="time" id="taskbarTime">10:42 AM</div>
-              <div class="date">Mon, May 4</div>
+              <div class="date" id="taskbarDate">Mon, May 4</div>
             </div>
 
             <!-- The hint that fades after first interaction -->
@@ -1141,10 +1143,13 @@
   </footer>
 
   <script>
-    // ----- Live taskbar clock -----
+    // ----- Live taskbar clock + date -----
     (function () {
       const el = document.getElementById('taskbarTime');
+      const dateEl = document.getElementById('taskbarDate');
       if (!el) return;
+      const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       function tick() {
         const d = new Date();
         let h = d.getHours();
@@ -1152,9 +1157,10 @@
         const am = h < 12 ? 'AM' : 'PM';
         h = h % 12; if (h === 0) h = 12;
         el.textContent = `${h}:${m} ${am}`;
+        if (dateEl) dateEl.textContent = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
       }
       tick();
-      setInterval(tick, 30000);
+      setInterval(tick, 60000);
     })();
 
     // ----- Tray icon right-click menu -----

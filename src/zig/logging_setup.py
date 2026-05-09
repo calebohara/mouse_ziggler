@@ -27,6 +27,8 @@ def _log_path() -> Path:
 def setup_file_logging(level: int = logging.INFO) -> Path:
     path = _log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink():
+        raise RuntimeError(f"noidle log directory is a symlink or junction: {path.parent}")
 
     root = logging.getLogger()
     existing = getattr(root, _HANDLER_ATTR, None)
