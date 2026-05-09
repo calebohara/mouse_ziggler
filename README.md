@@ -34,21 +34,22 @@ Published: `2026-05-09T21:26:30Z`
 <summary>Release notes</summary>
 
 ### Security
-
-* **HIGH-1 fixed** — symlink/junction attack on log directory writes: `path.is_symlink()` guard added in `logging_setup.py` and `noidle.py _crash_log_path()`. A pre-positioned attacker who turned `%LOCALAPPDATA%\noidle\` into a junction could no longer weaponize noidle as an arbitrary file-write primitive.
-* **HIGH-2 fixed** — all GitHub Actions in `build.yml`, `lint.yml`, and `update-readme.yml` pinned to immutable commit SHAs (was: mutable major-version tags). Supply-chain compromise via re-pointed upstream tag is no longer possible.
+* **HIGH-1** — symlink/junction guard on log directory writes (`logging_setup.py`, `_crash_log_path()`). Pre-positioned local attacker can no longer use a junction to redirect noidle log writes to arbitrary paths.
+* **HIGH-2** — all GitHub Actions pinned to immutable commit SHAs (`build.yml`, `lint.yml`, `update-readme.yml`). Mutable major-version tags removed.
 
 ### Added
-
-* **Full pytest suite** — 5 new platform-independent test modules covering updater (version comparison, URL safety, rate limiting), hotkey parsing, config coercion + round-trips, whats_new parsing, and jiggler API validation. Runs on Linux/macOS/Windows CI with no Win32 calls.
-* **Version consistency smoke check** — `_smoke()` now reads `pyproject.toml` via `tomllib` and asserts `zig.__version__` matches. Catches accidental version drift before a PyInstaller bundle ships.
-* **Landing page: Open Graph image** — `og:image` was a `data:` URI (universally rejected by social crawlers). Now served as `https://noidle.app/og.svg` — social previews work on X, LinkedIn, Slack, iMessage.
-* **Landing page: CSP + X-Frame-Options** — added to `vercel.json` headers.
-* **Landing page: live taskbar clock** — date element now also updates in real time.
+* **pytest suite** — 5 platform-independent test modules: updater, hotkey, config, whats_new, jiggler. Runs on Linux/macOS/Windows CI with no Win32 calls.
+* **Smoke version check** — `_smoke()` reads `pyproject.toml` via `tomllib` and fails fast on `zig.__version__` mismatch.
+* **Landing page** — `og:image` corrected to `https://noidle.app/og.svg`; CSP + `X-Frame-Options` headers; live taskbar date.
 
 ### Fixed
+* `jiggler.start()` — `_state.running = True` moved after `prevent_sleep()` to prevent stuck "running" state on Win32 error.
+* `HotkeyListener.start()` — raises `TimeoutError` after 5 s instead of silently leaking the thread.
+* `packaging` added to dependencies — fixes pre-release version comparison (`0.4.0-rc.1` wrongly treated as newer than `0.4.0`).
+* Smoke-test bare `assert` → `if/raise AssertionError` so `python -O` doesn't strip checks.
+* WCAG AA fix on landing page muted text (`#65656e` → `#80808a`).
 
-* `jiggler.start()` state corruption — `_state.running 
+**Full Changelog**: https://github.com/calebohara/noidle.app/compare/v0.3.7...v0.3.8
 
 </details>
 
