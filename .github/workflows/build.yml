@@ -51,8 +51,16 @@ jobs:
         # shim ("noidle-debug.exe") so a smoke failure produces a real
         # diagnostic in the Actions log instead of just an exit code. The
         # debug exe is NOT shipped — it's deleted before artifact upload.
+        #
+        # timeout-minutes is the job-level fail-safe: a wedged smoke run
+        # (e.g. a non-daemon import-time thread keeping the interpreter
+        # alive after _smoke() returns) used to burn the full 6h default
+        # before failing. Cap at 10m and surface per-process timeouts
+        # below so we get logs instead of an empty cancellation.
+        timeout-minutes: 10
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $exe = "dist/noidle.exe"
           if (-not (Test-Path $exe)) { Write-Error "Build produced no exe"; exit 1 }
 
@@ -61,25 +69,37 @@ jobs:
           $dbg = "dist/noidle-debug.exe"
           if (-not (Test-Path $dbg)) { Write-Error "Debug exe build failed"; exit 1 }
 
-          # Run the debug exe so we can see stdout if smoke fails.
-          $p = Start-Process -FilePath $dbg -ArgumentList "--smoke" -Wait -PassThru -NoNewWindow -RedirectStandardOutput smoke-out.txt -RedirectStandardError smoke-err.txt
-          Write-Host "--- smoke stdout ---"
-          if (Test-Path smoke-out.txt) { Get-Content smoke-out.txt }
-          Write-Host "--- smoke stderr ---"
-          if (Test-Path smoke-err.txt) { Get-Content smoke-err.txt }
-          Write-Host "Exit code: $($p.ExitCode)"
-
-          if ($p.ExitCode -ne 0) {
-            Write-Error "noidle-debug.exe --smoke failed with exit $($p.ExitCode). Refusing to publish."
-            exit 1
+          # Run smoke with a hard 120s per-process timeout. Start-Process
+          # -Wait blocks indefinitely if the child never exits; using
+          # WaitForExit(ms) lets us kill + diagnose a hang instead.
+          function Invoke-Smoke($path, $label) {
+            $outFile = "smoke-$label-out.txt"
+            $errFile = "smoke-$label-err.txt"
+            $p = Start-Process -FilePath $path -ArgumentList "--smoke" `
+              -PassThru -NoNewWindow `
+              -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            if (-not $p.WaitForExit(120000)) {
+              try { $p.Kill($true) } catch {}
+              Write-Host "--- $label stdout (partial, process hung) ---"
+              if (Test-Path $outFile) { Get-Content $outFile }
+              Write-Host "--- $label stderr (partial, process hung) ---"
+              if (Test-Path $errFile) { Get-Content $errFile }
+              Write-Error "$path --smoke hung past 120s. Refusing to publish."
+              exit 1
+            }
+            Write-Host "--- $label stdout ---"
+            if (Test-Path $outFile) { Get-Content $outFile }
+            Write-Host "--- $label stderr ---"
+            if (Test-Path $errFile) { Get-Content $errFile }
+            Write-Host "$label exit code: $($p.ExitCode)"
+            if ($p.ExitCode -ne 0) {
+              Write-Error "$path --smoke failed with exit $($p.ExitCode). Refusing to publish."
+              exit 1
+            }
           }
 
-          # Sanity: also run the real --noconsole exe and confirm it exits 0.
-          $p2 = Start-Process -FilePath $exe -ArgumentList "--smoke" -Wait -PassThru -NoNewWindow
-          if ($p2.ExitCode -ne 0) {
-            Write-Error "noidle.exe (--noconsole) --smoke failed with exit $($p2.ExitCode). Refusing to publish."
-            exit 1
-          }
+          Invoke-Smoke $dbg "debug"
+          Invoke-Smoke $exe "noconsole"
 
           # Don't ship the debug exe.
           Remove-Item $dbg -Force

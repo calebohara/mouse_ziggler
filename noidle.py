@@ -275,7 +275,11 @@ def _smoke() -> int:
 
 def main() -> int:
     if "--smoke" in sys.argv:
-        return _smoke()
+        # os._exit (not sys.exit / return) skips atexit + threading
+        # shutdown. Any import-time non-daemon thread (e.g. the pystray
+        # message pump on Windows) would otherwise keep the interpreter
+        # alive after _smoke() succeeds, wedging CI's Start-Process -Wait.
+        os._exit(_smoke())
     if "--version" in sys.argv:
         from noidle import __version__ as v
         print(f"noidle.app {v}", flush=True)
