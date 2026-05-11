@@ -42,9 +42,15 @@ jobs:
       - name: Build with PyInstaller
         # --collect-submodules noidle replaces the brittle hand-maintained list of
         # --hidden-import flags. Adding a new src/noidle/foo.py module is now picked
-        # up automatically by the bundle (and by the smoke test, which uses
-        # pkgutil.iter_modules to mirror the same discovery).
-        run: pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --paths src --collect-submodules noidle noidle.py
+        # up automatically by the bundle.
+        #
+        # --add-data "src;src" is required: the repo has BOTH noidle.py (entry
+        # script) AND src/noidle/ (package). They collide on the name `noidle`
+        # inside the bundle — `import noidle` resolves to the script (no
+        # __path__) and every `from noidle.X import Y` fails with "noidle is
+        # not a package". Bundling src/ lets the sys.path.insert(0, _MEIPASS/src)
+        # at the top of noidle.py resolve `noidle` to the package first.
+        run: pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico --add-data "assets;assets" --add-data "src;src" --paths src --collect-submodules noidle noidle.py
 
       - name: Exclude dist/ + TEMP from Defender (silent hang fix)
         # Run 7888659 produced 120s of empty stdout/stderr from the smoke
@@ -93,7 +99,9 @@ jobs:
           if (-not (Test-Path $exe)) { Write-Error "Build produced no exe"; exit 1 }
 
           # Build a parallel console-mode exe purely for capturing smoke output.
-          pyinstaller --onefile --console --name noidle-debug --paths src --collect-submodules noidle noidle.py
+          # Mirrors the main build's --add-data "src;src" — without it, the
+          # noidle entry script shadows the noidle package in the bundle.
+          pyinstaller --onefile --console --name noidle-debug --add-data "src;src" --paths src --collect-submodules noidle noidle.py
           $dbg = "dist/noidle-debug.exe"
           if (-not (Test-Path $dbg)) { Write-Error "Debug exe build failed"; exit 1 }
 
