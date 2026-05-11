@@ -113,18 +113,55 @@ def _write_crash(exc: BaseException) -> Path:
     return p
 
 
+# Every src/noidle/*.py module the smoke test should import. Update this
+# when you add a new submodule — the dev-mode check in
+# _enumerate_noidle_modules() will yell at you if you forget.
+_SMOKE_NOIDLE_MODULES: tuple[str, ...] = (
+    "noidle.activity",
+    "noidle.autostart",
+    "noidle.config",
+    "noidle.engine",
+    "noidle.hotkey",
+    "noidle.logging_setup",
+    "noidle.stats",
+    "noidle.tray",
+    "noidle.updater",
+    "noidle.whats_new",
+    "noidle.winapi",
+)
+
+
 def _enumerate_noidle_modules() -> list[str]:
-    """Discover every src/noidle/*.py module via pkgutil so the smoke test
-    catches a future module that someone forgot to add to a hand-curated
-    list. Mirrors what `--collect-submodules noidle` does in PyInstaller.
+    """Return the noidle.* module list the smoke test imports.
+
+    We used to discover modules via pkgutil.iter_modules(noidle.__path__),
+    but PyInstaller's frozen importer doesn't implement enumeration over
+    the PYZ-backed package: in the bundled .exe the call blocked silently
+    on Windows runners (run 25702419310 — 120s of empty stdout after the
+    "smoke: start" marker). Fall back to a static list.
+
+    To keep the "auto-detect new modules" guarantee, when we're NOT
+    frozen we cross-check the static list against actual src/noidle/*.py
+    files. So `python noidle.py --smoke` locally fails fast if someone
+    adds a module without updating _SMOKE_NOIDLE_MODULES.
     """
-    import pkgutil
-    import noidle
-    return sorted(
-        f"noidle.{m.name}"
-        for m in pkgutil.iter_modules(noidle.__path__)
-        if not m.ispkg and not m.name.startswith("_")
-    )
+    if not getattr(sys, "frozen", False):
+        src = Path(__file__).parent / "src" / "noidle"
+        if src.is_dir():
+            actual = {
+                f"noidle.{p.stem}"
+                for p in src.glob("*.py")
+                if not p.stem.startswith("_")
+            }
+            expected = set(_SMOKE_NOIDLE_MODULES)
+            if actual != expected:
+                missing = sorted(actual - expected)
+                extra = sorted(expected - actual)
+                raise RuntimeError(
+                    "_SMOKE_NOIDLE_MODULES out of sync with src/noidle/: "
+                    f"missing={missing} extra={extra}"
+                )
+    return list(_SMOKE_NOIDLE_MODULES)
 
 
 def _smoke() -> int:
