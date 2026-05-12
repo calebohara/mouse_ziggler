@@ -74,20 +74,23 @@ jobs:
           pyinstaller --onefile --noconsole --name noidle --icon assets/icon.ico `
             --add-data "assets;assets" --add-data "src;src" --paths src `
             --collect-submodules noidle `
+            --collect-submodules logging `
+            --collect-submodules urllib `
+            --collect-submodules tkinter `
+            --collect-submodules collections `
+            --collect-submodules packaging `
+            --hidden-import ctypes.wintypes `
             --hidden-import json `
             --hidden-import re `
             --hidden-import dataclasses `
-            --hidden-import urllib `
-            --hidden-import urllib.request `
-            --hidden-import urllib.error `
-            --hidden-import urllib.parse `
             --hidden-import subprocess `
             --hidden-import webbrowser `
             --hidden-import random `
-            --hidden-import tkinter `
-            --hidden-import tkinter.ttk `
             --hidden-import tomllib `
             --hidden-import inspect `
+            --hidden-import atexit `
+            --hidden-import signal `
+            --hidden-import importlib `
             _pyi_entry.py
 
       - name: Exclude dist/ + TEMP from Defender (silent hang fix)
@@ -141,20 +144,23 @@ jobs:
           pyinstaller --onefile --console --name noidle-debug `
             --add-data "src;src" --paths src `
             --collect-submodules noidle `
+            --collect-submodules logging `
+            --collect-submodules urllib `
+            --collect-submodules tkinter `
+            --collect-submodules collections `
+            --collect-submodules packaging `
+            --hidden-import ctypes.wintypes `
             --hidden-import json `
             --hidden-import re `
             --hidden-import dataclasses `
-            --hidden-import urllib `
-            --hidden-import urllib.request `
-            --hidden-import urllib.error `
-            --hidden-import urllib.parse `
             --hidden-import subprocess `
             --hidden-import webbrowser `
             --hidden-import random `
-            --hidden-import tkinter `
-            --hidden-import tkinter.ttk `
             --hidden-import tomllib `
             --hidden-import inspect `
+            --hidden-import atexit `
+            --hidden-import signal `
+            --hidden-import importlib `
             _pyi_entry.py
           $dbg = "dist/noidle-debug.exe"
           if (-not (Test-Path $dbg)) { Write-Error "Debug exe build failed"; exit 1 }
